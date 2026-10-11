@@ -1,0 +1,65 @@
+# DAS · Automated NPC (`darsh-npc`)
+
+[![Tests](https://github.com/Darshyne/darsh-npc/actions/workflows/tests.yml/badge.svg)](https://github.com/Darshyne/darsh-npc/actions/workflows/tests.yml)
+
+**[Website](https://darshyne.github.io)** · **[Discord](https://discord.gg/PDSq8dYdTP)** (questions, bugs, ideas)
+
+Part of **Darshyne's Automation Suite (DAS)**. An **AI for the monsters and NPCs the GM plays**, for **Foundry VTT V14** and
+**dnd5e 6.x**: it decides, the [`dnd5e-combat`](https://github.com/Darshyne/dnd5e-combat) engine executes.
+
+Planned scope (see the roadmap below):
+
+- **Out of combat, in real time**: patrols along routes drawn as Regions, guard posts, movement flags (forbidden, refuge,
+  alarm, vantage point, reserve), NPC schedules on the world clock (day watch, night sleep, relief), perception through the
+  engine's sight and hearing rules, alerts spreading through a group, reinforcements, and **automatic engagement**: the combat
+  is created, NPC initiative rolled, players roll theirs as usual.
+- **In combat, turn by turn**: target priority by **Intelligence** (bestial, simple, average, cunning, tactical), **Wisdom**,
+  skills and **hatreds** (creature type, species, faction), movement by the engine's pathfinder, attacks and the **basic
+  actions** (Attack, Multiattack, Dash, Disengage, Dodge, Hide), morale: **flight and surrender**.
+- **Catch phrases** as in-character chat bubbles at key moments (spotted, hit, bloodied, ally down, flee, surrender).
+- **The GM keeps control**: autopilot per token (on / confirm each plan / off), a scene switch, five automation levels, the
+  GM takes over with any gesture on the token, pause freezes everything, a scene snapshot to reset every creature.
+- **Nothing is ever written on actors or items.** State lives in token and combatant flags, Regions and world settings.
+  Never a player character.
+
+## State
+
+**0.1.0 — step 1 of the roadmap, read-only.** The module reads a creature's **profile** from its sheet (Intelligence band,
+Wisdom, courage, preferred range, mobility, senses, traits, hatreds) and builds its **view** (perceived enemies with distance,
+appearance, armour, role) and the **ranked targets** it would pick, without acting. API:
+`game.modules.get("darsh-npc").api.ai.profile(actor, token)`, `.view(token)`, `.targets(token)`,
+`.register(source, { profiles, enmities })`. Two world settings: the NPC automation level (default **Off**) and omniscient NPCs.
+
+Roadmap: 2 minimal turn (attack a target already in reach) · 3 movement · 4 morale, confirm mode, takeover · 5 catch phrases ·
+6 Regions and real time · 7 engagement and reinforcements · 7 bis scene snapshot · 8 abilities declared by the engine's content ·
+9 hatreds and registered tables · 9 bis schedules.
+
+It **requires the [`dnd5e-combat`](https://github.com/Darshyne/dnd5e-combat) engine** (≥ 0.228.0). The engine does not
+depend on this module and runs without it.
+
+## Installation
+
+In Foundry (or on The Forge), *Install Module* → paste the manifest URL:
+
+```
+https://github.com/Darshyne/darsh-npc/releases/latest/download/module.json
+```
+
+From source: the Foundry module is the `module/` subfolder, to copy or link into `Data/modules/darsh-npc`. Tests: `npm install`
+then `npm test`. In-game scenarios: `tools/scenarios/`, played with the engine's scenario runner.
+
+## For other modules
+
+Profiles and hatreds for your own creatures (a campaign module, a bestiary) are registered by identifier, never by copying
+content: `Hooks.on("darsh-npc.register", register => register("my-module", { profiles: [...], enmities: [...] }))` at `setup`, or
+`api.ai.register(...)` later. Invalid entries are reported and skipped, the rest is taken.
+
+## Translations
+
+The module ships English and French. To add a language, copy `module/lang/en.json` to `module/lang/<code>.json`, translate the
+values, and add an entry to `languages` in `module/module.json`; missing keys fall back to English.
+
+## License
+
+MIT. No book text or premium content is shipped; generic profiles and hatreds only. Dungeons & Dragons SRD 5.2 content is used
+under the Creative Commons Attribution 4.0 International License.

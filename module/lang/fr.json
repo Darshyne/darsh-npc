@@ -1,0 +1,13 @@
+{
+  "DNPC.Niveau.off": "Arrêt : rien ne tourne",
+  "DNPC.Niveau.patrols": "Patrouilles : temps réel, perception et répliques, sans engagement",
+  "DNPC.Niveau.engage": "Engagement : + alerte et début de combat ; en combat les tokens pilotés rendent la main",
+  "DNPC.Niveau.combat": "Combat : + IA de combat sur les actions de base",
+  "DNPC.Niveau.full": "Intégral : + capacités déclarées par le contenu du moteur",
+  "DNPC.Reglage.Niveau.Nom": "Niveau d'automatisation des PNJ",
+  "DNPC.Reglage.Niveau.Indic": "Ce que l'IA a le droit de faire. Par-dessus, chaque token a son pilote (marche, confirmer, arrêt).",
+  "DNPC.Reglage.Omniscient.Nom": "PNJ omniscients",
+  "DNPC.Reglage.Omniscient.Indic": "Les créatures lisent les points de vie exacts des PJ au lieu de leur apparence (frais, blessé, ensanglanté, à l'agonie).",
+  "DNPC.Moteur.Absent": "DAS · Automated NPC : le moteur dnd5e-combat n'est pas actif, le module reste en veille.",
+  "DNPC.Moteur.Niveau": "DAS · Automated NPC : le niveau d'automatisation du moteur est inférieur à « Assisté » ; sans attaques d'opportunité ni réactions, l'IA de combat sera limitée."
+}

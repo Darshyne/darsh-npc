@@ -1,0 +1,13 @@
+{
+  "DNPC.Niveau.off": "Off: nothing runs",
+  "DNPC.Niveau.patrols": "Patrols: real time, perception and catch phrases, no engagement",
+  "DNPC.Niveau.engage": "Engagement: + alerts and combat start; in combat, piloted tokens hand over to the GM",
+  "DNPC.Niveau.combat": "Combat: + combat AI with the basic actions",
+  "DNPC.Niveau.full": "Full: + abilities declared by the engine's content",
+  "DNPC.Reglage.Niveau.Nom": "NPC automation level",
+  "DNPC.Reglage.Niveau.Indic": "What the AI is allowed to do. On top of it, each token has its own autopilot (on, confirm, off).",
+  "DNPC.Reglage.Omniscient.Nom": "Omniscient NPCs",
+  "DNPC.Reglage.Omniscient.Indic": "Creatures read the PCs' exact hit points instead of their appearance (fresh, hurt, bloodied, near death).",
+  "DNPC.Moteur.Absent": "DAS · Automated NPC: the dnd5e-combat engine is not active, the module stays idle.",
+  "DNPC.Moteur.Niveau": "DAS · Automated NPC: the engine's automation level is below “Assisted”; without opportunity attacks and reactions, the combat AI will be limited."
+}
