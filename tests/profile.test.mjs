@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  bandOf, atLeast, wisdomOf, courageOf, rangeOf, traitFlags, profileOf, validateOverride, validateProfiles, matchFacts, layersFrom
+  bandOf, atLeast, wisdomOf, courageOf, rangeOf, roleOf, traitFlags, profileOf, validateOverride, validateProfiles, matchFacts, layersFrom
 } from "../module/scripts/core/profile.mjs";
 
 /** Des faits synthétiques (aucune fiche réelle) : un humanoïde moyen. */
@@ -141,5 +141,41 @@ describe("validation des surcharges et des tables", () => {
     expect(matchFacts({ name: "x" }, f)).toBe(false);
     expect(layersFrom([{ match: { subtype: "goblinoid" }, set: { courage: "normal" } }, { match: { type: "ooze" }, set: {} }], f, "module"))
       .toEqual([{ source: "module", set: { courage: "normal" } }]);
+  });
+});
+
+describe("rôle et portée lus sur la fiche (contrôle en jeu du 2026-10-12)", () => {
+  const unarmed = { ranged: false, melee: true, spell: false, unarmed: true, equipped: true };
+  const staff = { ranged: false, melee: true, spell: false, equipped: false };
+  const rayOfFrost = { ranged: true, melee: false, spell: true, equipped: true };
+  const arcaneBurst = { ranged: true, melee: true, spell: false, equipped: true };
+  const mace = { ranged: false, melee: true, spell: false, equipped: true };
+
+  it("les mains nues et les armes rangées ne font pas d'un magicien un combattant", () => {
+    expect(roleOf({ spellcaster: true, attacks: [rayOfFrost, unarmed, staff] })).toBe("caster");
+  });
+  it("un lanceur de sorts dague ou masse en main reste lanceur", () => {
+    expect(roleOf({ spellcaster: true, attacks: [{ ...mace, weaponType: "simpleM" }, unarmed, rayOfFrost] })).toBe("caster");
+    expect(roleOf({ spellcaster: true, attacks: [{ ...mace, weaponType: null }, rayOfFrost] })).toBe("caster");   // une torche
+  });
+  it("un lanceur de sorts à l'arme de guerre est vu au contact", () => {
+    expect(roleOf({ spellcaster: true, attacks: [{ ...mace, weaponType: "martialM" }, unarmed] })).toBe("melee");
+    expect(roleOf({ spellcaster: false, attacks: [{ ...mace, weaponType: "simpleM" }] })).toBe("melee");
+  });
+  it("un lanceur à l'arc long est vu tireur", () => {
+    const longbow = { ranged: true, melee: false, spell: false, equipped: true, weaponType: "martialR" };
+    const sword = { ...mace, equipped: false, weaponType: "martialM" };
+    expect(roleOf({ spellcaster: true, attacks: [longbow, sword, unarmed, { ...mace, weaponType: null }] })).toBe("ranged");
+  });
+  it("sans arme visible ni sort : rôle inconnu", () => {
+    expect(roleOf({ spellcaster: false, attacks: [unarmed] })).toBe("unknown");
+  });
+  it("une attaque au corps à corps ou à distance tire", () => {
+    expect(rangeOf([arcaneBurst])).toBe("ranged");
+    expect(rangeOf([arcaneBurst, mace])).toBe("mixed");
+  });
+  it("les mains nues ne comptent pas, sauf si c'est tout ce qu'il y a", () => {
+    expect(rangeOf([rayOfFrost, unarmed])).toBe("ranged");
+    expect(rangeOf([unarmed])).toBe("melee");
   });
 });

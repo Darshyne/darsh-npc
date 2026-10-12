@@ -11,6 +11,9 @@
  *  - concentration : effet actif portant le statut `CONFIG.specialStatusEffects.CONCENTRATING` (documents/actor/actor.mjs:247).
  */
 import { averageOf } from "../core/dice.mjs";
+import { roleOf } from "../core/profile.mjs";
+
+export { roleOf };
 import { identifierOf } from "./engine.mjs";
 
 /** @returns {import("../core/profile.mjs").Facts} */
@@ -27,18 +30,28 @@ export function factsOf(actor) {
     if ( item.type === "feat" ) { const id = identifierOf(item); if ( id ) traits.push(id); }
     for ( const activity of item.system?.activities ?? [] ) {
       if ( activity.type !== "attack" ) continue;
+      const range = {
+        value: activity.range?.value ?? null,
+        long: activity.range?.long ?? null,
+        reach: activity.range?.reach ?? null,
+        units: activity.range?.units ?? null
+      };
+      const typed = activity.attack?.type?.value === "ranged";
+      // « Attaque au corps à corps ou à distance » (Jaillissement arcanique du Mage) : dnd5e la type `melee`, mais sa portée dépasse
+      // l'allonge sans être celle d'une arme de jet. Elle compte pour les deux.
+      const thrown = !!item.system?.properties?.has?.("thr");
+      const both = !typed && !thrown && (Number(range.value) > Math.max(Number(range.reach) || 5, 5));
       attacks.push({
         id: activity.uuid,
         item: item.id,
         name: item.name,
-        ranged: activity.attack?.type?.value === "ranged",
+        ranged: typed || both,
+        melee: !typed,
         spell: activity.attack?.type?.classification === "spell",
-        range: {
-          value: activity.range?.value ?? null,
-          long: activity.range?.long ?? null,
-          reach: activity.range?.reach ?? null,
-          units: activity.range?.units ?? null
-        },
+        unarmed: activity.attack?.type?.classification === "unarmed",
+        equipped: (item.type !== "weapon") || (item.system?.equipped !== false),
+        weaponType: (item.type === "weapon") ? (item.system?.type?.value ?? null) : null,
+        range,
         damage: averageDamage(activity)
       });
     }
@@ -62,7 +75,11 @@ export function factsOf(actor) {
     size: sys.traits?.size ?? "med",
     legendary: ((sys.resources?.legact?.max ?? 0) > 0) || ((sys.resources?.legres?.max ?? 0) > 0),
     speaks: (sys.traits?.languages?.value?.size ?? 0) > 0,
-    spellcaster: ((actor?.itemTypes?.spell?.length ?? 0) > 0) || !!sys.attributes?.spellcasting,
+    // `attributes.spellcasting` ne dit rien : dnd5e y met une caractéristique par défaut sur toute fiche (« str » sur le Zombi).
+    // Un PJ n'est lanceur qu'avec des emplacements (un tour de magie de don d'origine ne fait pas d'un Moine un mage) ; un PNJ du
+    // MM 2024 lance sans emplacements, ses sorts suffisent.
+    spellcaster: Object.values(sys.spells ?? {}).some(s => (s?.max ?? 0) > 0)
+      || ((actor?.type !== "character") && ((actor?.itemTypes?.spell?.length ?? 0) > 0)),
     armor: armorWeightOf(actor),
     concentrating: !!actor?.concentration?.effects?.size,
     traits,
@@ -78,13 +95,6 @@ export function armorWeightOf(actor) {
   const type = armor?.system?.type?.value;
   if ( ["heavy", "medium", "light"].includes(type) ) return type;
   return "none";
-}
-
-/** Rôle apparent (SPEC §7.3) : lanceur de sorts, tireur, corps à corps. */
-export function roleOf(facts) {
-  if ( facts.spellcaster && !facts.attacks.some(a => !a.ranged && !a.spell) ) return "caster";
-  const range = facts.attacks.length ? (facts.attacks.every(a => a.ranged) ? "ranged" : "melee") : "unknown";
-  return range;
 }
 
 /** Dégâts moyens d'une activité d'attaque : somme des parties, formules résolues avec les données de jet de l'activité. */

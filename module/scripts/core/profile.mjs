@@ -23,8 +23,12 @@
  * @typedef {object} Attack
  * @property {string} id        uuid de l'activité
  * @property {string} name
- * @property {boolean} ranged
+ * @property {boolean} ranged    Utilisable à distance.
+ * @property {boolean} [melee]   Utilisable au contact (une attaque « au corps à corps ou à distance » a les deux).
  * @property {boolean} spell
+ * @property {boolean} [unarmed] Attaque à mains nues (tout PJ en a une : elle ne dit rien de son rôle).
+ * @property {boolean} [equipped] Faux pour une arme rangée.
+ * @property {string|null} [weaponType] Type dnd5e de l'arme (`simpleM`, `martialM`, `natural`, `improv`…), null hors arme.
  * @property {{value:number|null, long:number|null, reach:number|null, units:string|null}} range
  * @property {number} damage    Dégâts moyens d'un coup qui touche.
  */
@@ -85,11 +89,28 @@ export function courageOf(facts) {
 
 /** Portée préférée d'après les attaques de la fiche (SPEC §6.3). */
 export function rangeOf(attacks=[]) {
-  const melee = attacks.some(a => !a.ranged);
-  const ranged = attacks.some(a => a.ranged);
+  const used = attacks.filter(a => !a.unarmed);
+  const pool = used.length ? used : attacks;
+  // Une attaque utilisable des deux façons (`melee` et `ranged` vrais) ne force pas le contact : si toutes le permettent, la créature
+  // tire. `melee` absent = ancien format, déduit de `ranged`.
+  if ( pool.length && pool.every(a => a.ranged) ) return "ranged";
+  const melee = pool.some(a => !a.ranged);
+  const ranged = pool.some(a => a.ranged);
   if ( melee && ranged ) return "mixed";
-  if ( ranged ) return "ranged";
   return "melee";
+}
+
+/** Rôle apparent (SPEC §7.3) : lanceur de sorts, tireur, corps à corps. */
+export function roleOf(facts) {
+  // Ce qu'on voit en main : ni les mains nues (tout PJ en a une), ni une arme rangée.
+  const shown = facts.attacks.filter(a => !a.unarmed && (a.equipped !== false));
+  // Une dague, un bâton ou une torche en main ne font pas d'un lanceur de sorts un combattant : seule une arme de guerre ou
+  // naturelle le montre au contact (le Paladin à l'épée ; le Clerc à la masse reste lanceur).
+  // Un arc long en main fait un tireur, pas un lanceur (le Rôdeur).
+  const fights = a => !a.spell && ["martialM", "martialR", "natural"].includes(a.weaponType);
+  const weapons = facts.spellcaster ? shown.filter(fights) : shown;
+  if ( facts.spellcaster && !weapons.length ) return "caster";
+  return weapons.length ? (weapons.every(a => a.ranged) ? "ranged" : "melee") : "unknown";
 }
 
 /** Identifiants dnd5e des traits qui changent la conduite → drapeaux. */
