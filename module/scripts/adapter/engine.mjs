@@ -180,3 +180,22 @@ export async function drop(token) {
   const fn = engine()?.drop;
   return typeof fn === "function" ? fn(token) : null;
 }
+
+/* -------------------------------------------- */
+/*  Temps réel (étape 6a, SPEC §10.4)            */
+/* -------------------------------------------- */
+
+/**
+ * Marcher jusqu'à la plus proche de ces cases (`api.approach(token, { cells, level })`, §39.1 du moteur : chemin, portes, et hors
+ * combat aucun plafond). Rend `{ arrived, reason? }` ; `{ arrived: false, reason: "unsupported" }` sans moteur.
+ */
+export async function approachCells(token, cells, level=null) {
+  const fn = engine()?.approach;
+  if ( typeof fn !== "function" ) return { arrived: false, reason: "unsupported" };
+  return fn(token, { cells, ...(level ? { level } : {}) });
+}
+
+/** Arrêter les marches lancées par ce client (`api.stopWalks`, §102 du moteur) : la pause du jeu. */
+export function stopWalks() {
+  engine()?.stopWalks?.();
+}

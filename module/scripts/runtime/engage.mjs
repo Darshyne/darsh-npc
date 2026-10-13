@@ -85,6 +85,8 @@ export async function engage(scene, tokens, causes=[]) {
   // Repérés : ceux qui ont vu parlent (au plus deux), avant le début du combat.
   const observers = [...new Set(causes.map(c => c.observerId).filter(Boolean))].map(id => scene.tokens.get(id)).filter(t => t && fresh.includes(t));
   barkSpotted(observers);
+  // Le « ! » au-dessus de ceux qui ont vu (ui/markers.mjs : visible le temps que le combat commence).
+  for ( const o of observers ) await o.setFlag(MODULE_ID, "alert", { state: "alert", at: Date.now() }).catch(() => {});
   await maybeStart(combat);
   log.info(`engagement: ${fresh.map(t => t.name).join(", ")} ${created ? "start a combat" : "join the combat"}`);
   return { combat, added: fresh };

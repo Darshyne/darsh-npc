@@ -20,6 +20,9 @@ import { registerConfirm, answer as answerConfirm } from "./runtime/confirm.mjs"
 import { registerMarkers } from "./ui/markers.mjs";
 import { registerBarks, bark, lineFor } from "./runtime/barks.mjs";
 import { registerBarksEditor } from "./ui/barks-editor.mjs";
+import { registerBehaviors } from "./adapter/behaviors.mjs";
+import { registerClock, alertOf, hear, forget, tick as clockTick } from "./runtime/clock.mjs";
+import { registerAssign, assign } from "./ui/assign.mjs";
 
 /** Le token d'une scène affichée par son id, ou l'erreur qui dit pourquoi. */
 function tokenOf(tokenId) {
@@ -45,6 +48,9 @@ Hooks.once("init", () => {
   registerMarkers();
   registerBarks();
   registerBarksEditor();
+  registerBehaviors();
+  registerClock();
+  registerAssign();
 });
 
 Hooks.once("setup", () => {
@@ -78,6 +84,12 @@ Hooks.once("ready", () => {
       autopilot: (token, mode) => (mode === undefined ? pilotOf(token) : setPilot(token, mode)),
       /** Une réplique maintenant (§11) : `moment` parmi spotted, engage, attack, hit, bloodied, kill, allyDown, leaderDown, flee, surrender, victory. */
       bark: (token, moment, { force=true }={}) => bark(token, moment, { force }),
+      /** L'état d'alerte hors combat d'un token (§4 : idle, suspicious, alert, searching, confused). */
+      alertState: token => alertOf(token),
+      /** Donner un doute à un token mené par l'IA (« un bruit là ») : il se tourne, puis va voir. */
+      alert: (token, point) => hear(token, point),
+      /** Affecter un token à une patrouille ou un poste (id de région), ou le retirer (null). */
+      assign: (token, regionId) => assign(token, regionId),
       /** Engagement automatique (§10.3) : juger la scène affichée maintenant (mettre en combat qui voit un ennemi). */
       engage: () => checkEngagement(),
       /** Profils et haines d'un autre module, validés. */
@@ -161,6 +173,20 @@ Hooks.once("ready", () => {
         else if ( barks !== undefined ) await token.setFlag(MODULE_ID, "barks", barks);
         return token.getFlag(MODULE_ID, "barks") ?? null;
       },
+      /** Affecter à une patrouille ou un poste (`regionId`), ou retirer (`regionId: null`). */
+      affecter: async ({ tokenId, regionId=null }={}) => assign(tokenOf(tokenId), regionId),
+      /** L'état d'alerte hors combat ; `reset` : l'oublier (mémoire et flag). */
+      alerte: async ({ tokenId, reset=false }={}) => {
+        const token = tokenOf(tokenId);
+        if ( reset ) await forget(token);
+        return { ...alertOf(token), flag: token.getFlag(MODULE_ID, "alert") ?? null };
+      },
+      /** Un doute pour ce token (un bruit en `x`, `y`). */
+      doute: ({ tokenId, x, y }={}) => { hear(tokenOf(tokenId), { x, y }); return { heard: { x, y } }; },
+      /** Mettre le jeu en pause ou l'en sortir (scénarios du temps réel). */
+      pause: async ({ paused=true }={}) => { game.togglePause(!!paused, { broadcast: true }); return { paused: game.paused }; },
+      /** Un pas d'horloge tout de suite (sans attendre la seconde). */
+      horloge: async () => { await clockTick(); return { ticked: true }; },
       pilote: async ({ tokenId, mode }={}) => {
         const token = tokenOf(tokenId);
         return { mode: mode === undefined ? pilotOf(token) : await setPilot(token, mode), refus: refusal(token) };

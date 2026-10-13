@@ -22,7 +22,9 @@ describe("fichiers de langue", () => {
   for ( const lang of ["fr", "en"] ) {
     it(`${lang} : chaque clé demandée existe`, () => {
       const json = JSON.parse(readFileSync(join(ROOT, `lang/${lang}.json`), "utf8"));
-      expect(Array.from(usedKeys()).filter(k => !(k in json))).toEqual([]);
+      // Un préfixe de traduction (`LOCALIZATION_PREFIXES` d'un modèle de données) existe si au moins une clé commence par lui.
+      const present = k => (k in json) || Object.keys(json).some(j => j.startsWith(`${k}.FIELDS.`));
+      expect(Array.from(usedKeys()).filter(k => !present(k))).toEqual([]);
     });
   }
 

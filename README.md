@@ -70,6 +70,16 @@ moan). Never the same line twice in a row, a silence between two lines, and a fr
 creature type or token in the **Catch phrases** editor (module settings), and share them as JSON; other modules can register theirs
 with `api.ai.register(source, { barks })`.
 
+**0.6.0 — step 6a, NPCs out of combat (alpha).** Two new region behaviors: **Patrol (DAS)** — the region is the route (a single
+polygon's vertices in drawing order, or the centre of each shape), looped, back and forth or random, with a pause at each point — and
+**Guard post (DAS)** — assigned creatures stay there, wander a little and face a set direction. Assign a creature from its token HUD.
+In real time (one step per second on the GM's client, frozen while the game is paused), a creature that sees an enemy becomes
+**alert** (a red « ! » above it) and warns nearby allies; when it loses sight of the enemy it goes **searching** to the last known
+position (an eye), stands there **confused** if it finds nothing (a grey « ? »), then goes back to its patrol or post. A doubt — a
+noise, an ally's shout — makes it **suspicious** (a yellow « ? »): it turns, then goes to look. With Automatic combat on, being seen
+still starts the fight. Note: after installing or updating to this version, relaunch the world so Foundry knows the new region
+behaviors.
+
 Roadmap:
 6 Regions and real time · 7 engagement and reinforcements · 7 bis scene snapshot · 8 abilities declared by the engine's content ·
 9 hatreds and registered tables · 9 bis schedules.
