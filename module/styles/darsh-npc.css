@@ -6,3 +6,9 @@
 .dnpc-trace ul { margin: 0; padding-left: 1.2em; }
 .dnpc-trace .dnpc-yield { margin: 0.3em 0 0; font-style: italic; }
 .control-icon.dnpc-pilot.active { color: var(--color-warm-1, #ff6400); }
+
+/* Mode « confirmer » (§12.2) */
+.dnpc-confirm .dnpc-buttons { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.dnpc-confirm .dnpc-buttons button { flex: 1 1 auto; line-height: 1.6; font-size: var(--font-size-12, 12px); }
+.dnpc-confirm .dnpc-targets button { flex: 0 1 auto; }
+.dnpc-confirm .dnpc-decision { font-style: italic; margin: 4px 0 0; }

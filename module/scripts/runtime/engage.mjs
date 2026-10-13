@@ -17,6 +17,7 @@
 import { MODULE_ID, loc, log, setting, escape } from "../shared.mjs";
 import * as engine from "../adapter/engine.mjs";
 import { hostile } from "../adapter/view.mjs";
+import { haltAll } from "./pilot.mjs";
 
 const isActiveGM = () => game.users.activeGM?.isSelf === true;
 const OUT = ["dead", "unconscious", "incapacitated", "paralyzed", "petrified", "stunned"];
@@ -158,6 +159,8 @@ export function registerEngage() {
       ui.controls?.render();
       // Allumer l'IA alors que le niveau du module est « Arrêt » : elle passe au niveau « Combat », sinon l'interrupteur ne ferait rien.
       if ( on && game.user.isGM && (setting("level") === "off") ) game.settings.set(MODULE_ID, "level", "combat");
+      // Coupée (bouton ou Ctrl+Alt+N, §13) : les cartes de confirmation tranchées, tous les MJ prévenus.
+      if ( !on ) { haltAll(); if ( game.user.isGM ) ui.notifications.info(loc("Pilote.Coupe")); }
     }
   });
   game.settings.register(MODULE_ID, "autoEngage", {

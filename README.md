@@ -51,7 +51,18 @@ only to its **normal range, where it sees the target**, keeping its distance. A 
 Then it attacks as above. Needs the engine's `approach` toward a target, `path` and `basics.take` (engine ≥ 0.238.0); with an older
 engine the turn is handed back to the GM.
 
-Roadmap: 4 morale, confirm mode, takeover · 5 catch phrases ·
+**0.4.0 — step 4, morale and GM control (alpha).** A piloted creature checks its **morale** at the start of its turn when it drops
+to half its HP, when half its group or its leader goes down, or when it has been unable to harm anyone for two turns: a DC 10 Wisdom
+saving throw rolled by the engine (mindless and fanatic creatures never check; brave ones have Advantage, cowardly ones
+Disadvantage). On a failure it **flees** — Disengaging first if it is clever enough and an enemy is adjacent, otherwise Dashing — and
+when cornered it **surrenders** if it can (Intelligence 6 or more, not brave): it drops what it holds, turns Neutral, stops playing
+its turns, and shows a white flag. Attacked after surrendering, it turns hostile again and flees if it can. Each token's autopilot
+now has three modes (token HUD): off, on, and **confirm** — a private card shows the GM the intent and its reasons, with Play, Skip
+turn, I'll play, and a button per perceived enemy to pick another target. Moving the token or using one of its activities during its
+turn **takes over** that turn, and **Ctrl+Alt+N** (or the brain toggle) turns the AI off at once. Needs the engine's `save`, `flee`
+and `drop` (engine ≥ 0.238.0).
+
+Roadmap: 5 catch phrases ·
 6 Regions and real time · 7 engagement and reinforcements · 7 bis scene snapshot · 8 abilities declared by the engine's content ·
 9 hatreds and registered tables · 9 bis schedules.
 

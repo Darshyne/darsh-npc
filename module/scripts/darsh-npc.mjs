@@ -15,6 +15,9 @@ import { scoreTargets } from "./core/targets.mjs";
 import { validateView } from "./core/view.mjs";
 import { registerPilot, planFor, playTurn, pilotOf, setPilot, refusal } from "./runtime/pilot.mjs";
 import { registerEngage, check as checkEngagement, engagementsOn } from "./runtime/engage.mjs";
+import { registerMorale, moraleOf, setMorale } from "./runtime/morale.mjs";
+import { registerConfirm, answer as answerConfirm } from "./runtime/confirm.mjs";
+import { registerMarkers } from "./ui/markers.mjs";
 
 /** Le token d'une scène affichée par son id, ou l'erreur qui dit pourquoi. */
 function tokenOf(tokenId) {
@@ -35,6 +38,9 @@ Hooks.once("init", () => {
   registerSettings();
   registerPilot();
   registerEngage();
+  registerMorale();
+  registerConfirm();
+  registerMarkers();
 });
 
 Hooks.once("setup", () => {
@@ -129,6 +135,14 @@ Hooks.once("ready", () => {
           movement
         };
       },
+      /** L'état de moral d'un token dans le combat en cours ; `reset` : l'effacer (scénarios). */
+      moral: async ({ tokenId, reset=false }={}) => {
+        const token = tokenOf(tokenId);
+        if ( reset ) await token.unsetFlag(MODULE_ID, "morale");
+        return { ...moraleOf(token), disposition: token.disposition };
+      },
+      /** Répondre à une carte de confirmation (§12.2) comme un bouton : `choice` = play | skip | manual, `target` : id de token. */
+      confirmer: ({ messageId, choice="play", target=null }={}) => ({ answered: answerConfirm(messageId, { choice, target }) }),
       pilote: async ({ tokenId, mode }={}) => {
         const token = tokenOf(tokenId);
         return { mode: mode === undefined ? pilotOf(token) : await setPilot(token, mode), refus: refusal(token) };

@@ -151,3 +151,32 @@ export function onResolution(fn) {
     if ( TERMINAL.has(resolution?.step) ) fn(resolution);
   });
 }
+
+/* -------------------------------------------- */
+/*  Le moral (étape 4, SPEC §9.5)                */
+/* -------------------------------------------- */
+
+/**
+ * Une sauvegarde demandée par le moteur hors résolution (§180 : `api.save`), visible dans le chat. Rend `{ total, d20, dc, success }`,
+ * ou null (moteur trop ancien, rien lancé).
+ */
+export async function save(actor, request) {
+  const fn = engine()?.save;
+  return typeof fn === "function" ? (await fn(actor, request)) ?? null : null;
+}
+
+/**
+ * S'éloigner d'une menace par la marche du moteur (§180 : `api.flee`), plus `extra` (la Vitesse) ; `dryRun` : seulement tester.
+ * Rend `{ moved, from, to, possible?, reason? }`, ou `{ moved: false, reason: "unsupported" }`.
+ */
+export async function flee(token, from, { extra=0, dryRun=false }={}) {
+  const fn = engine()?.flee;
+  if ( typeof fn !== "function" ) return { moved: false, reason: "unsupported" };
+  return fn(token, from, { extra, dryRun });
+}
+
+/** Lâcher ce que la créature tient, comme l'ordre « Lâche » (§180 : `api.drop`). Rend `{ items, pile, kept }`, ou null. */
+export async function drop(token) {
+  const fn = engine()?.drop;
+  return typeof fn === "function" ? fn(token) : null;
+}
