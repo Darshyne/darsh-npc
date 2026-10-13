@@ -81,3 +81,24 @@ export function planAttack(view, profile, enmities, attacks, { allowed=null }={}
   }
   return { type: "yield", reason: "outOfReach" };
 }
+
+/**
+ * Étape 3 (SPEC §9.3) : où aller quand aucune cible n'est à portée. La meilleure cible du classement (§8) ; un **tireur** (profil
+ * `ranged`, ou sans attaque de contact) s'en approche jusqu'à la portée normale de sa meilleure attaque à distance, **en la voyant** —
+ * il garde ses distances ; sinon, au contact, jusqu'à l'allonge de sa meilleure attaque de contact. Rend
+ * `{ type: "move", target, reachCells, seeing, attack, reasons }`, ou `{ type: "yield", reason }`.
+ */
+export function planMove(view, profile, enmities, attacks, { allowed=null }={}) {
+  const ranked = scoreTargets(view, profile, enmities);
+  if ( !ranked.length ) return { type: "yield", reason: "noEnemy" };
+  const usable = (attacks ?? []).filter(a => !allowed || allowed.has(a.item));
+  const strongest = list => list.reduce((best, a) => (!best || ((a.damage ?? 0) > (best.damage ?? 0)) ? a : best), null);
+  const armed = list => list.filter(a => a.equipped && !a.unarmed);
+  const melee = strongest(armed(usable.filter(a => a.melee && (a.reach > 0)))) ?? strongest(usable.filter(a => a.melee && (a.reach > 0)));
+  const ranged = strongest(armed(usable.filter(a => a.ranged && (a.normal > 0) && !a.thrown))) ?? strongest(usable.filter(a => a.ranged && (a.normal > 0)));
+  const shooter = !!ranged && ((profile.range === "ranged") || !melee);
+  const attack = shooter ? ranged : melee;
+  if ( !attack ) return { type: "yield", reason: "noAttack" };
+  const first = ranked[0];
+  return { type: "move", target: first.id, reachCells: shooter ? attack.normal : attack.reach, seeing: shooter, attack, reasons: first.reasons };
+}

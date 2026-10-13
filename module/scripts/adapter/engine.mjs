@@ -51,11 +51,38 @@ export function canSee(observer, target) {
 }
 
 /**
- * Coût d'un chemin sans le jouer. **Non public** (SPEC §14.2 R1) : rend null, et la vue prend la distance (`meta.costIsDistance`).
+ * Coût d'un chemin sans le jouer. Le moteur publie un chemin (`api.path`, §179) mais pas son coût (SPEC §14.2 R1, en partie
+ * livrée) : rend null, et la vue prend la distance (`meta.costIsDistance`). Pas d'appel ici : un A* par ennemi et par vue, pour rien.
  */
 export function pathCost(token, goal) {
+  return null;
+}
+
+/**
+ * Un chemin vers une cible, sans le parcourir (moteur §179) : `{ arrives, moves, door }`, ou null (pas de chemin, ou moteur trop
+ * ancien). `reachCells` : l'allonge ou la portée voulue, en cases ; `seeing` : s'arrêter où l'on voit la cible ; `extra` : la
+ * Vitesse en plus du plafond du tour (« arriverait-il en Sprintant ? »).
+ */
+export function pathToward(token, target, { reachCells=1, seeing=false, extra=0 }={}) {
   const api = engine();
-  return typeof api?.path === "function" ? (api.path(token, goal)?.cost ?? null) : null;
+  if ( typeof api?.path !== "function" ) return null;
+  return api.path(token, { target, reachCells, seeing }, { extra }) ?? null;
+}
+
+/**
+ * Marcher vers une cible jusqu'à `reachCells` cases (moteur §179 : portes, attaques d'opportunité, budget du tour). Rend
+ * `{ arrived, reason? }` ; `{ arrived: false, reason: "unsupported" }` si le moteur ne sait pas approcher une cible.
+ */
+export async function approachTarget(token, target, { reachCells=1, seeing=false }={}) {
+  const api = engine();
+  if ( (typeof api?.approach !== "function") || (typeof api?.path !== "function") ) return { arrived: false, reason: "unsupported" };
+  return api.approach(token, { target, reachCells, seeing });
+}
+
+/** Prendre une action de base sans item (moteur §179 : `dash`, `disengage`, `dodge`), payée sur le budget du tour. Rend true si prise. */
+export async function takeBasic(actor, kind) {
+  const take = engine()?.basics?.take;
+  return typeof take === "function" ? !!(await take(actor, kind)) : false;
 }
 
 /* -------------------------------------------- */

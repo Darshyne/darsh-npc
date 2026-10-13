@@ -1,7 +1,9 @@
 /**
- * Le pilote (SPEC §9.1, étape 2 du §16) : au tour d'un token piloté, chez le MJ actif, attaquer la meilleure cible **déjà à
- * portée** autant de fois que le moteur l'accorde (Attaques multiples, Attaque supplémentaire), puis finir le tour ; sinon rendre
- * la main au MJ. Une carte de trace, privée au MJ, dit ce qui a été joué et pourquoi. Pas de déplacement à cette étape.
+ * Le pilote (SPEC §9.1, étapes 2 et 3 du §16) : au tour d'un token piloté, chez le MJ actif, attaquer la meilleure cible à portée
+ * autant de fois que le moteur l'accorde (Attaques multiples, Attaque supplémentaire), puis finir le tour. Personne à portée : il
+ * s'approche de la meilleure cible par le chemin du moteur (au contact, ou à portée normale **en la voyant** pour un tireur), en
+ * Sprintant au contact si son déplacement ne suffit pas, puis attaque s'il le peut encore. Une carte de trace, privée au MJ, dit
+ * ce qui a été joué et pourquoi.
  *
  * Le pilote d'un token : flag de token `flags["darsh-npc"].autopilot` = `on` | `off` (absent : le défaut du monde, réglage
  * `pilotDefault`, `off` — Q12). Jamais un PJ, un token possédé par un joueur ou un token Secret, vérifié à chaque tour (§13).
@@ -12,7 +14,7 @@ import * as engine from "../adapter/engine.mjs";
 import { attacksOf, viewOf } from "../adapter/view.mjs";
 import { factsOf } from "../adapter/sheet.mjs";
 import { profileFor } from "./profile.mjs";
-import { planAttack } from "../core/plan.mjs";
+import { planAttack, planMove } from "../core/plan.mjs";
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const isActiveGM = () => game.users.activeGM?.isSelf === true;
@@ -20,6 +22,8 @@ const isActiveGM = () => game.users.activeGM?.isSelf === true;
 const OUT = ["dead", "unconscious", "incapacitated", "paralyzed", "petrified", "stunned"];
 /** Garde-fou : au-delà, le tour est rendu au MJ (SPEC §13 : budget de temps). */
 const MAX_ATTACKS = 8;
+/** Déplacements par tour : un pour s'approcher, un autre après une cible tombée. */
+const MAX_MOVES = 2;
 
 /** Le token peut-il être piloté du tout ? Rend null, ou la raison du refus (clé de traduction). */
 export function refusal(token) {
@@ -58,7 +62,34 @@ export function planFor(token, { allowed=null }={}) {
   const facts = factsOf(token.actor);
   const { profile, enmities } = profileFor(token.actor, token);
   const view = viewOf(token);
-  return { plan: planAttack(view, profile, enmities, attacksOf(token, facts), { allowed }), view, profile };
+  const attacks = attacksOf(token, facts);
+  const plan = planAttack(view, profile, enmities, attacks, { allowed });
+  const move = (plan.reason === "outOfReach") ? planMove(view, profile, enmities, attacks, { allowed }) : null;
+  return { plan, move, view, profile };
+}
+
+/**
+ * S'approcher (étape 3, SPEC §9.3) : vers la cible de `move`, par le moteur. Au contact, si le déplacement du tour ne suffit pas et
+ * que l'Action est libre, Sprinter d'abord (`dash`) — un tireur ne Sprinte pas : il avance et tire au tour suivant. Rend l'étape
+ * jouée `{ type: "move", target, dashed, arrived }`, ou `{ reason }` si rien n'a bougé.
+ */
+async function moveToward(token, combatant, move) {
+  const target = token.parent.tokens.get(move.target);
+  if ( !target ) return { reason: "noEnemy" };
+  const goal = { reachCells: move.reachCells, seeing: move.seeing };
+  const direct = engine.pathToward(token, target, goal);
+  if ( !direct ) return { reason: "noPath" };
+  const left = engine.movement(token);
+  if ( left && (left.left <= 0) && !direct.arrives ) return { reason: "noMovement" };
+  let dashed = false;
+  if ( !direct.arrives && !move.seeing && combatant && engine.budget(combatant)?.action && (left?.speed > 0) ) {
+    const sprint = engine.pathToward(token, target, { ...goal, extra: left.speed });
+    if ( sprint?.moves ) dashed = await engine.takeBasic(token.actor, "dash");
+  }
+  if ( !direct.moves && !dashed ) return { reason: direct.arrives ? "outOfReach" : "noMovement" };
+  const walked = await engine.approachTarget(token, target, goal);
+  if ( walked.reason === "unsupported" ) return { reason: "engineTooOld" };
+  return { type: "move", target: target.name, dashed, arrived: !!walked.arrived, why: walked.reason ?? null, reasons: move.reasons };
 }
 
 /** Les items encore jouables ce tour : ceux des Attaques multiples ouvertes, ou tous (null) si l'action Attaquer en accorde encore. */
@@ -94,14 +125,42 @@ export async function playTurn(token, combatant=null) {
   if ( engine.targetingPending() ) return { steps, reason: "targeting" };
   const started = Date.now();
   let first = true;
-  while ( steps.length < MAX_ATTACKS ) {
+  let moves = 0;
+  let attacks = 0;
+  while ( attacks < MAX_ATTACKS ) {
     if ( game.paused ) return { steps, reason: "paused" };
     if ( (Date.now() - started) > (setting("turnTimeout") * 1000) ) return { steps, reason: "timeout" };
     if ( refusal(token) ) return { steps, reason: "refused" };
-    const allowed = first ? null : allowedNow(token, combatant);
+    let allowed = first ? null : allowedNow(token, combatant);
+    // Le moteur publie ce qui reste des Attaques multiples par une écriture du MJ : une seconde lecture avant de conclure.
+    if ( allowed && !allowed.size ) { await sleep(600); allowed = allowedNow(token, combatant); }
     if ( allowed && !allowed.size ) break;
-    const { plan } = planFor(token, { allowed });
-    if ( plan.type !== "attack" ) return { steps, reason: first ? plan.reason : "done" };
+    const { plan, move } = planFor(token, { allowed });
+    if ( plan.type !== "attack" ) {
+      // Personne à portée : s'approcher (une fois, une seconde après une cible tombée), puis replanifier.
+      if ( (move?.type === "move") && (moves < MAX_MOVES) && (combatant || !moves) ) {
+        moves += 1;
+        const step = await moveToward(token, combatant, move);
+        if ( step.type !== "move" ) return { steps, reason: (attacks || moves > 1) ? "done" : step.reason };
+        steps.push(step);
+        if ( step.dashed ) return { steps, reason: "done" };   // l'Action est partie dans le Sprint
+        await sleep(300);
+        continue;
+      }
+      if ( attacks || moves ) return { steps, reason: "done" };
+      const reason = (move?.type === "yield") ? move.reason : plan.reason;
+      return { steps, reason };
+    }
+    // Un tir à longue portée (Désavantage) : d'abord se rapprocher à portée normale si le déplacement du tour y suffit.
+    if ( (plan.mode === "long") && !moves && combatant && (plan.attack.normal > 0) ) {
+      const closer = { type: "move", target: plan.target, reachCells: plan.attack.normal, seeing: true, attack: plan.attack, reasons: plan.reasons };
+      const near = engine.pathToward(token, token.parent.tokens.get(plan.target), { reachCells: closer.reachCells, seeing: true });
+      if ( near?.arrives && near.moves ) {
+        moves += 1;
+        const step = await moveToward(token, combatant, closer);
+        if ( step.type === "move" ) { steps.push(step); await sleep(300); continue; }
+      }
+    }
     const target = token.parent.tokens.get(plan.target);
     const activity = await fromUuid(plan.attack.id);
     if ( !target || !activity ) return { steps, reason: "noAttack" };
@@ -110,7 +169,8 @@ export async function playTurn(token, combatant=null) {
     const used = await engine.attackWith(activity, target, { attackMode });
     if ( !used ) return { steps, reason: "refusedByEngine" };
     const resolution = await done;
-    steps.push({ target: target.name, attack: plan.attack.name, mode: plan.mode, reasons: plan.reasons, outcome: outcomeOf(resolution, target.uuid) });
+    steps.push({ type: "attack", target: target.name, attack: plan.attack.name, mode: plan.mode, reasons: plan.reasons, outcome: outcomeOf(resolution, target.uuid) });
+    attacks += 1;
     await token.setFlag(MODULE_ID, "lastTarget", target.id);
     first = false;
     if ( !combatant ) break;   // hors combat : une attaque, pour essayer
@@ -121,10 +181,13 @@ export async function playTurn(token, combatant=null) {
 
 /** La carte de trace, privée aux MJ (SPEC §9.1-5, §12). */
 async function trace(token, { steps, reason }) {
-  const lines = steps.map(s => `<li>${loc("Pilote.Trace.Attaque", {
-    attack: escape(s.attack), target: escape(s.target), outcome: escape(s.outcome),
-    reasons: s.reasons?.length ? s.reasons.map(r => loc(`Raison.${r}`)).join(", ") : "—"
-  })}</li>`).join("");
+  const why = s => s.reasons?.length ? s.reasons.map(r => loc(`Raison.${r}`)).join(", ") : "—";
+  const lines = steps.map(s => `<li>${(s.type === "move")
+    ? loc("Pilote.Trace.Approche", {
+      target: escape(s.target), how: loc(s.dashed ? "Pilote.Trace.Sprint" : "Pilote.Trace.Marche"),
+      outcome: loc(s.arrived ? "Pilote.Trace.Arrive" : "Pilote.Trace.Pas"), reasons: why(s)
+    })
+    : loc("Pilote.Trace.Attaque", { attack: escape(s.attack), target: escape(s.target), outcome: escape(s.outcome), reasons: why(s) })}</li>`).join("");
   const end = (reason === "done") ? "" : `<p class="dnpc-yield">${escape(loc(`Pilote.Rend.${reason}`))}</p>`;
   await ChatMessage.create({
     content: `<div class="dnpc-trace"><h4><i class="fa-solid fa-brain"></i> ${escape(token.name)}</h4>${lines ? `<ul>${lines}</ul>` : ""}${end}</div>`,
@@ -152,7 +215,7 @@ async function onTurnChange(combat, prior, current) {
     log.info(`${token.name}: ${result.steps.length} attack(s), ${result.reason}`);
     await trace(token, result);
     const still = (combat.combatant?.id === combatant.id) && combat.started;
-    if ( still && setting("autoEndTurn") && ["done", "outOfReach", "noEnemy", "noAttack", "incapacitated", "ordered"].includes(result.reason) ) {
+    if ( still && setting("autoEndTurn") && ["done", "outOfReach", "noEnemy", "noAttack", "incapacitated", "ordered", "noPath", "noMovement"].includes(result.reason) ) {
       await sleep(setting("turnDelay"));
       if ( combat.combatant?.id === combatant.id ) await combat.nextTurn();
     }

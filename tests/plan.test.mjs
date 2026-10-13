@@ -82,3 +82,27 @@ describe("intention du tour (étape 2 : sans déplacement)", () => {
     expect(planAttack(view([enemy("e")]), profile(), [], [attack("x")], { allowed: new Set() }).reason).toBe("noAttack");
   });
 });
+
+describe("déplacement (étape 3)", () => {
+  it("au contact : la meilleure cible, jusqu'à l'allonge de la meilleure arme de contact", async () => {
+    const { planMove } = await import("../module/scripts/core/plan.mjs");
+    const v = view([enemy("loin", { distance: 6, cost: 6 })]);
+    const move = planMove(v, profile(), [], [attack("cimeterre", { damage: 6 }), attack("pique", { damage: 5, reach: 2 })]);
+    expect(move).toMatchObject({ type: "move", target: "loin", reachCells: 1, seeing: false });
+    expect(move.attack.name).toBe("cimeterre");
+  });
+  it("un tireur garde ses distances : sa portée normale, en voyant la cible", async () => {
+    const { planMove } = await import("../module/scripts/core/plan.mjs");
+    const bow = attack("arc", { melee: false, ranged: true, reach: 0, normal: 16, long: 64 });
+    const move = planMove(view([enemy("e", { distance: 30, cost: 30 })]), profile("average", { range: "ranged" }), [], [bow, attack("dague", { damage: 3 })]);
+    expect(move).toMatchObject({ type: "move", reachCells: 16, seeing: true });
+    expect(move.attack.name).toBe("arc");
+  });
+  it("sans arme de contact, même un profil de mêlée tire ; sans attaque, rend la main", async () => {
+    const { planMove } = await import("../module/scripts/core/plan.mjs");
+    const bow = attack("arc", { melee: false, ranged: true, reach: 0, normal: 16, long: 64 });
+    expect(planMove(view([enemy("e", { distance: 30, cost: 30 })]), profile(), [], [bow])).toMatchObject({ seeing: true, reachCells: 16 });
+    expect(planMove(view([enemy("e")]), profile(), [], [])).toEqual({ type: "yield", reason: "noAttack" });
+    expect(planMove(view([]), profile(), [], [attack("x")])).toEqual({ type: "yield", reason: "noEnemy" });
+  });
+});

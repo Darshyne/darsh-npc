@@ -25,7 +25,7 @@
   "DNPC.Pilote.Trace.SansReponse": "pas de réponse du moteur à temps",
   "DNPC.Pilote.Rend.noEnemy": "Aucun ennemi perçu : le tour vous revient.",
   "DNPC.Pilote.Rend.noAttack": "Aucune attaque utilisable sur la fiche : le tour vous revient.",
-  "DNPC.Pilote.Rend.outOfReach": "Aucun ennemi à portée (le déplacement viendra dans une version suivante) : le tour vous revient.",
+  "DNPC.Pilote.Rend.outOfReach": "Aucun ennemi à portée, même en se déplaçant : le tour vous revient.",
   "DNPC.Pilote.Rend.incapacitated": "Neutralisé : rien à jouer.",
   "DNPC.Pilote.Rend.ordered": "Son tour a été décidé par un ordre (Injonction) : rien à jouer.",
   "DNPC.Pilote.Rend.targeting": "Le moteur attend une cible (sort « au début du tour ») : le tour vous revient.",
@@ -64,5 +64,13 @@
   "DNPC.Engagement.Rejoint": "Ils rejoignent le combat",
   "DNPC.Engagement.AVu": "{observer} voit {target}",
   "DNPC.Engagement.Entrent": "Entrent : {names}. Les joueurs lancent leur initiative ; le combat commence quand tout le monde en a une.",
-  "DNPC.Engagement.Repere": "{name} a été repéré : lancez votre initiative !"
+  "DNPC.Engagement.Repere": "{name} a été repéré : lancez votre initiative !",
+  "DNPC.Pilote.Trace.Approche": "S'approche de {target} {how} — {outcome} (pourquoi : {reasons})",
+  "DNPC.Pilote.Trace.Marche": "en marchant",
+  "DNPC.Pilote.Trace.Sprint": "en Sprintant",
+  "DNPC.Pilote.Trace.Arrive": "arrivé",
+  "DNPC.Pilote.Trace.Pas": "pas encore à portée",
+  "DNPC.Pilote.Rend.noPath": "Aucun chemin vers la cible : le tour vous revient.",
+  "DNPC.Pilote.Rend.noMovement": "Plus de déplacement ce tour pour approcher : le tour vous revient.",
+  "DNPC.Pilote.Rend.engineTooOld": "Le moteur (DAS · Core) est trop ancien pour approcher une cible : le tour vous revient."
 }

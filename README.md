@@ -34,8 +34,7 @@ appearance, armour, role) and the **ranked targets** it would pick, without acti
 (brain button of the token HUD, or the world default "on for Hostile tokens"), on that token's turn the GM's client attacks the
 best target **already in reach** — melee, ranged or thrown, picking the attack by expected damage, chaining Multiattack and Extra
 Attack as long as the engine grants attacks — then ends the turn. A private **trace card** tells the GM what was played and why
-(or why the turn is handed back: no enemy in reach — movement comes at step 3 —, incapacitated, an order such as Command, paused,
-time limit). Never a player character, a player-owned or a Secret token. API: `.plan(token)` (the intent, without playing it),
+(or why the turn is handed back: no enemy in reach, incapacitated, an order such as Command, paused, time limit). Never a player character, a player-owned or a Secret token. API: `.plan(token)` (the intent, without playing it),
 `.play(token)`, `.autopilot(token, "on" | "off")`.
 
 **Automatic combat**, also in 0.2.0: when a GM creature **sees** a creature hostile to it (the engine's vision rules: light,
@@ -45,7 +44,14 @@ joins as soon as one sees it, so some characters can be in the combat and others
 the combat begins once everyone has one. Two toggles in the **token tool bar** (GM): **NPC AI** (brain) and **Automatic combat**
 (crossed swords), both off by default.
 
-Roadmap: 3 movement · 4 morale, confirm mode, takeover · 5 catch phrases ·
+**0.3.0 — step 3, movement (alpha).** When no enemy is in reach, the piloted creature walks toward its best target along the
+engine's path (doors, opportunity attacks and the turn's movement included): to **melee reach**, or — for a **ranged** creature —
+only to its **normal range, where it sees the target**, keeping its distance. A melee creature whose movement falls short **Dashes**
+(its Action is spent, no attack that turn); a shot that would be at long range first closes to normal range when the movement allows.
+Then it attacks as above. Needs the engine's `approach` toward a target, `path` and `basics.take` (engine ≥ 0.238.0); with an older
+engine the turn is handed back to the GM.
+
+Roadmap: 4 morale, confirm mode, takeover · 5 catch phrases ·
 6 Regions and real time · 7 engagement and reinforcements · 7 bis scene snapshot · 8 abilities declared by the engine's content ·
 9 hatreds and registered tables · 9 bis schedules.
 

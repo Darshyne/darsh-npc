@@ -25,7 +25,7 @@
   "DNPC.Pilote.Trace.SansReponse": "no answer from the engine in time",
   "DNPC.Pilote.Rend.noEnemy": "No enemy perceived: the turn is yours.",
   "DNPC.Pilote.Rend.noAttack": "No usable attack on the sheet: the turn is yours.",
-  "DNPC.Pilote.Rend.outOfReach": "No enemy within reach (moving comes in a later version): the turn is yours.",
+  "DNPC.Pilote.Rend.outOfReach": "No enemy within reach, even by moving: the turn is yours.",
   "DNPC.Pilote.Rend.incapacitated": "Incapacitated: nothing to play.",
   "DNPC.Pilote.Rend.ordered": "Its turn was decided by an order (Command): nothing to play.",
   "DNPC.Pilote.Rend.targeting": "The engine is waiting for a target (a spell at the start of the turn): the turn is yours.",
@@ -64,5 +64,13 @@
   "DNPC.Engagement.Rejoint": "They join the combat",
   "DNPC.Engagement.AVu": "{observer} sees {target}",
   "DNPC.Engagement.Entrent": "Joining: {names}. Players roll their initiative; the combat begins once everyone has one.",
-  "DNPC.Engagement.Repere": "{name} has been spotted: roll your initiative!"
+  "DNPC.Engagement.Repere": "{name} has been spotted: roll your initiative!",
+  "DNPC.Pilote.Trace.Approche": "Moves toward {target} {how} — {outcome} (why: {reasons})",
+  "DNPC.Pilote.Trace.Marche": "walking",
+  "DNPC.Pilote.Trace.Sprint": "with a Dash",
+  "DNPC.Pilote.Trace.Arrive": "arrived",
+  "DNPC.Pilote.Trace.Pas": "not in reach yet",
+  "DNPC.Pilote.Rend.noPath": "No path to the target: the turn is yours.",
+  "DNPC.Pilote.Rend.noMovement": "No movement left this turn to close in: the turn is yours.",
+  "DNPC.Pilote.Rend.engineTooOld": "The engine (DAS · Core) is too old to approach a target: the turn is yours."
 }
