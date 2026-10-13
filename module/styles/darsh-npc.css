@@ -12,3 +12,11 @@
 .dnpc-confirm .dnpc-buttons button { flex: 1 1 auto; line-height: 1.6; font-size: var(--font-size-12, 12px); }
 .dnpc-confirm .dnpc-targets button { flex: 0 1 auto; }
 .dnpc-confirm .dnpc-decision { font-style: italic; margin: 4px 0 0; }
+
+/* Éditeur des répliques (§12.4) */
+.dnpc-barks-editor .window-content { display: flex; flex-direction: column; gap: 6px; }
+.dnpc-barks-editor .dnpc-barks-head { display: grid; grid-template-columns: 2fr 2fr 1fr; gap: 6px; }
+.dnpc-barks-editor .dnpc-barks-moments { flex: 1; overflow-y: auto; }
+.dnpc-barks-editor textarea { min-height: 3.2em; resize: vertical; }
+.dnpc-barks-editor textarea::placeholder { opacity: 0.55; }
+.dnpc-barks-editor .form-footer { display: flex; gap: 4px; }

@@ -62,7 +62,15 @@ turn, I'll play, and a button per perceived enemy to pick another target. Moving
 turn **takes over** that turn, and **Ctrl+Alt+N** (or the brain toggle) turns the AI off at once. Needs the engine's `save`, `flee`
 and `drop` (engine ≥ 0.238.0).
 
-Roadmap: 5 catch phrases ·
+**0.5.0 — step 5, catch phrases (alpha).** GM creatures speak at key moments of a fight — when they spot someone, when the
+fight starts, when they attack, get hit, are bloodied, down an enemy, see an ally or their leader fall, flee, surrender, or win — in
+character in the chat (with a bubble if chat bubbles are on), or as a bubble only. Lines are written for the module, in English and
+French, by family (brute, cunning, fiend, undead, dragon); creatures that don't speak make gestures instead (beasts growl, zombies
+moan). Never the same line twice in a row, a silence between two lines, and a frequency setting. Write your own lines per family,
+creature type or token in the **Catch phrases** editor (module settings), and share them as JSON; other modules can register theirs
+with `api.ai.register(source, { barks })`.
+
+Roadmap:
 6 Regions and real time · 7 engagement and reinforcements · 7 bis scene snapshot · 8 abilities declared by the engine's content ·
 9 hatreds and registered tables · 9 bis schedules.
 

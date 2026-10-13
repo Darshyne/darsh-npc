@@ -22,6 +22,7 @@ import { profileFor } from "./profile.mjs";
 import { planAttack, planMove } from "../core/plan.mjs";
 import { checkMorale, fleeTurn, moraleOf, noteHarm } from "./morale.mjs";
 import { askConfirm, answerAll } from "./confirm.mjs";
+import { bark } from "./barks.mjs";
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const isActiveGM = () => game.users.activeGM?.isSelf === true;
@@ -243,6 +244,7 @@ async function fight(token, combatant, steps, { only=null }={}) {
     const activity = await fromUuid(plan.attack.id);
     if ( !target || !activity ) return { steps, reason: "noAttack" };
     const attackMode = (plan.attack.thrown && (plan.mode !== "melee")) ? "thrown" : null;
+    if ( !attacks ) await bark(token, "attack").catch(() => null);
     const done = engine.resolutionOf(activity.uuid);
     const used = await act(() => engine.attackWith(activity, target, { attackMode }));
     if ( !used ) return { steps, reason: "refusedByEngine" };

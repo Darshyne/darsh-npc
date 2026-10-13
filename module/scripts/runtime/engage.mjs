@@ -18,6 +18,7 @@ import { MODULE_ID, loc, log, setting, escape } from "../shared.mjs";
 import * as engine from "../adapter/engine.mjs";
 import { hostile } from "../adapter/view.mjs";
 import { haltAll } from "./pilot.mjs";
+import { barkSpotted } from "./barks.mjs";
 
 const isActiveGM = () => game.users.activeGM?.isSelf === true;
 const OUT = ["dead", "unconscious", "incapacitated", "paralyzed", "petrified", "stunned"];
@@ -55,7 +56,7 @@ export function engagementsOn(scene) {
       if ( engine.canSee(observer, target) !== true ) continue;
       tokens.set(observer.id, observer);
       tokens.set(target.id, target);
-      causes.push({ observer: observer.name, target: target.name });
+      causes.push({ observer: observer.name, target: target.name, observerId: observer.id });
     }
   }
   return { tokens: [...tokens.values()], causes };
@@ -81,6 +82,9 @@ export async function engage(scene, tokens, causes=[]) {
   if ( npcs.length ) await combat.rollInitiative(npcs, { updateTurn: false });
   const players = fresh.filter(isPlayerSide);
   await announce(combat, fresh, players, causes, created);
+  // Repérés : ceux qui ont vu parlent (au plus deux), avant le début du combat.
+  const observers = [...new Set(causes.map(c => c.observerId).filter(Boolean))].map(id => scene.tokens.get(id)).filter(t => t && fresh.includes(t));
+  barkSpotted(observers);
   await maybeStart(combat);
   log.info(`engagement: ${fresh.map(t => t.name).join(", ")} ${created ? "start a combat" : "join the combat"}`);
   return { combat, added: fresh };

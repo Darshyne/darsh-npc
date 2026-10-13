@@ -12,6 +12,7 @@ import * as engine from "../adapter/engine.mjs";
 import { allied } from "../adapter/view.mjs";
 import { factsOf } from "../adapter/sheet.mjs";
 import { profileFor } from "./profile.mjs";
+import { bark } from "./barks.mjs";
 import { atLeast } from "../core/profile.mjs";
 import { moraleTest, moraleTriggers, canSurrender, fleeAction, CALM_TURNS } from "../core/morale.mjs";
 
@@ -31,19 +32,6 @@ export async function setMorale(token, patch, combat=game.combat) {
   const next = { ...current, ...patch, combat: combat?.id ?? current.combat ?? null };
   await token.setFlag(MODULE_ID, "morale", next);
   return next;
-}
-
-/** Une réplique en personnage (§11), si la créature parle ; bulle de chat du cœur comprise. Étape 5 : répliques complètes. */
-export async function bark(token, moment) {
-  const facts = factsOf(token.actor);
-  if ( !facts.speaks ) return null;
-  const lines = [1, 2, 3].map(n => `DNPC.Replique.${moment}.${n}`).filter(k => game.i18n.has(k)).map(k => game.i18n.localize(k));
-  if ( !lines.length ) return null;
-  const content = lines[Math.floor(Math.random() * lines.length)];
-  return ChatMessage.create({
-    speaker: ChatMessage.getSpeaker({ token }), content, style: CONST.CHAT_MESSAGE_STYLES.IC,
-    flags: { [MODULE_ID]: { bark: { token: token.uuid, moment } } }
-  });
 }
 
 /** Les alliés de la créature **dans ce combat**, pour les causes `halfDown` et `leaderDown`. */
@@ -78,7 +66,7 @@ export async function checkMorale(token, combat, profile) {
   if ( result.success ) await setMorale(token, { tested }, combat);
   else {
     await setMorale(token, { tested, state: "fleeing", calm: 0 }, combat);
-    await bark(token, "flee");
+    await bark(token, "flee", { force: true });
   }
   log.info(`${token.name}: morale ${causes.join("+")} → ${result.total} vs ${result.dc} ${result.success ? "holds" : "breaks"}`);
   return { type: "morale", causes, total: result.total, dc: result.dc, success: result.success };
@@ -90,7 +78,7 @@ async function surrender(token, combat) {
   const disposition = token.disposition;
   await token.update({ disposition: CONST.TOKEN_DISPOSITIONS.NEUTRAL });
   await setMorale(token, { state: "surrendered", disposition }, combat);
-  await bark(token, "surrender");
+  await bark(token, "surrender", { force: true });
   return { type: "surrender", dropped: dropped?.items ?? [] };
 }
 

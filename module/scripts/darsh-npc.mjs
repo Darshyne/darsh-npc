@@ -18,6 +18,8 @@ import { registerEngage, check as checkEngagement, engagementsOn } from "./runti
 import { registerMorale, moraleOf, setMorale } from "./runtime/morale.mjs";
 import { registerConfirm, answer as answerConfirm } from "./runtime/confirm.mjs";
 import { registerMarkers } from "./ui/markers.mjs";
+import { registerBarks, bark, lineFor } from "./runtime/barks.mjs";
+import { registerBarksEditor } from "./ui/barks-editor.mjs";
 
 /** Le token d'une scène affichée par son id, ou l'erreur qui dit pourquoi. */
 function tokenOf(tokenId) {
@@ -41,6 +43,8 @@ Hooks.once("init", () => {
   registerMorale();
   registerConfirm();
   registerMarkers();
+  registerBarks();
+  registerBarksEditor();
 });
 
 Hooks.once("setup", () => {
@@ -72,6 +76,8 @@ Hooks.once("ready", () => {
       play: token => playTurn(token, game.combat?.combatants?.find(c => c.tokenId === token.id) ?? null),
       /** Le pilote d'un token : lire, ou poser (`on` | `off`). */
       autopilot: (token, mode) => (mode === undefined ? pilotOf(token) : setPilot(token, mode)),
+      /** Une réplique maintenant (§11) : `moment` parmi spotted, engage, attack, hit, bloodied, kill, allyDown, leaderDown, flee, surrender, victory. */
+      bark: (token, moment, { force=true }={}) => bark(token, moment, { force }),
       /** Engagement automatique (§10.3) : juger la scène affichée maintenant (mettre en combat qui voit un ennemi). */
       engage: () => checkEngagement(),
       /** Profils et haines d'un autre module, validés. */
@@ -143,6 +149,18 @@ Hooks.once("ready", () => {
       },
       /** Répondre à une carte de confirmation (§12.2) comme un bouton : `choice` = play | skip | manual, `target` : id de token. */
       confirmer: ({ messageId, choice="play", target=null }={}) => ({ answered: answerConfirm(messageId, { choice, target }) }),
+      /** Une réplique (§11) : `{ tokenId, moment, force, dry }` — `dry` : la ligne choisie sans parler. */
+      repliquer: async ({ tokenId, moment, force=false, dry=false }={}) => {
+        const token = tokenOf(tokenId);
+        return dry ? lineFor(token, moment) : bark(token, moment, { force });
+      },
+      /** Les répliques propres à un token (flag `barks` : `{ moment: [lignes] }`), à lire ; `barks` : les poser ; `null` : les retirer. */
+      repliquesToken: async ({ tokenId, barks }={}) => {
+        const token = tokenOf(tokenId);
+        if ( barks === null ) await token.unsetFlag(MODULE_ID, "barks");
+        else if ( barks !== undefined ) await token.setFlag(MODULE_ID, "barks", barks);
+        return token.getFlag(MODULE_ID, "barks") ?? null;
+      },
       pilote: async ({ tokenId, mode }={}) => {
         const token = tokenOf(tokenId);
         return { mode: mode === undefined ? pilotOf(token) : await setPilot(token, mode), refus: refusal(token) };
