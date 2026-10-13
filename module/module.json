@@ -2,7 +2,7 @@
   "id": "darsh-npc",
   "title": "DAS · Automated NPC",
   "description": "An AI for GM-played monsters and NPCs in Darshyne's Automation Suite (DAS): patrols, perception and alerts, automatic engagement, and a combat AI (target priority by Intelligence, Wisdom, skills and hatreds, movement, basic actions, flight and surrender, catch phrases). Decides; the dnd5e-combat engine executes.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "authors": [
     {
       "name": "Darshyne"

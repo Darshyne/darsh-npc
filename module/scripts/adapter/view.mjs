@@ -54,6 +54,24 @@ function cellsOfSpeed(scene, speed, units) {
   return Math.floor(value / grid.distance);
 }
 
+/**
+ * Les attaques d'un token, distances en cases (core/plan.mjs) : allonge, portée normale et longue, converties depuis l'unité de la
+ * fiche vers celle de la grille (jamais de distance en dur). Une attaque de contact sans allonge écrite a 5 ft — la règle — dans
+ * l'unité de la grille (1 case).
+ */
+export function attacksOf(token, facts=factsOf(token.actor)) {
+  const scene = token.parent;
+  return facts.attacks.map(a => {
+    // Une arme de jet (dague, javelot) est typée « contact » par dnd5e : elle se lance aussi, à sa portée (le moteur tient le mode).
+    const ranged = a.ranged || !!a.thrown;
+    const reach = a.melee ? Math.max(1, cellsOfSpeed(scene, a.range.reach ?? 0, a.range.units)) : 0;
+    const normal = ranged ? cellsOfSpeed(scene, a.range.value ?? 0, a.range.units) : 0;
+    const long = ranged ? Math.max(normal, cellsOfSpeed(scene, a.range.long ?? 0, a.range.units)) : 0;
+    return { id: a.id, item: a.item, name: a.name, melee: a.melee, ranged, thrown: !!a.thrown, reach, normal, long,
+      damage: a.damage, equipped: a.equipped, unarmed: a.unarmed };
+  });
+}
+
 function isDown(actor) {
   const hp = actor?.system?.attributes?.hp;
   return !!actor && ((hp?.value ?? 0) <= 0);

@@ -2,7 +2,8 @@
  * DAS · Automated NPC (darsh-npc) — point d'entrée. Voir prive/SPEC.md.
  *
  * Requiert le moteur `dnd5e-combat` et ne passe que par son API publique (adapter/engine.mjs) ; le moteur ne connaît pas ce
- * module et tourne sans lui. Étape 1 (SPEC §16) : lecture seule — profil et vue d'un token, score des cibles — sans aucune action.
+ * module et tourne sans lui. Étape 1 (SPEC §16) : profil et vue d'un token, score des cibles. Étape 2 : le pilote — au tour d'un
+ * token piloté, attaquer la meilleure cible déjà à portée, puis finir le tour (runtime/pilot.mjs).
  */
 import { MODULE_ID, loc, log } from "./shared.mjs";
 import { registerSettings, levelAtLeast as npcLevelAtLeast } from "./adapter/settings.mjs";
@@ -12,6 +13,8 @@ import { profileFor } from "./runtime/profile.mjs";
 import { register, unregister, registered } from "./runtime/registry.mjs";
 import { scoreTargets } from "./core/targets.mjs";
 import { validateView } from "./core/view.mjs";
+import { registerPilot, planFor, playTurn, pilotOf, setPilot, refusal } from "./runtime/pilot.mjs";
+import { registerEngage, check as checkEngagement, engagementsOn } from "./runtime/engage.mjs";
 
 /** Le token d'une scène affichée par son id, ou l'erreur qui dit pourquoi. */
 function tokenOf(tokenId) {
@@ -30,6 +33,8 @@ function targetsOf(token) {
 
 Hooks.once("init", () => {
   registerSettings();
+  registerPilot();
+  registerEngage();
 });
 
 Hooks.once("setup", () => {
@@ -55,6 +60,14 @@ Hooks.once("ready", () => {
       view: token => viewOf(token),
       /** Les cibles classées d'un token (SPEC §8), sans rien jouer. */
       targets: token => targetsOf(token),
+      /** L'intention que le pilote jouerait maintenant (sans rien exécuter) : `{ type: "attack", target, attack, mode, reasons }` | `{ type: "yield", reason }`. */
+      plan: token => planFor(token).plan,
+      /** Jouer le tour de ce token comme le pilote (MJ actif) : `{ steps, reason }`. */
+      play: token => playTurn(token, game.combat?.combatants?.find(c => c.tokenId === token.id) ?? null),
+      /** Le pilote d'un token : lire, ou poser (`on` | `off`). */
+      autopilot: (token, mode) => (mode === undefined ? pilotOf(token) : setPilot(token, mode)),
+      /** Engagement automatique (§10.3) : juger la scène affichée maintenant (mettre en combat qui voit un ennemi). */
+      engage: () => checkEngagement(),
       /** Profils et haines d'un autre module, validés. */
       register,
       unregister,
@@ -81,6 +94,36 @@ Hooks.once("ready", () => {
       vue: ({ tokenId }={}) => {
         const view = viewOf(tokenOf(tokenId));
         return { ...view, problems: validateView(view) };
+      },
+      /** Lire ou poser un réglage du module (scénarios) : `{ key, before, now }`. */
+      reglage: async ({ key, value }={}) => {
+        if ( !game.settings.settings.has(`${MODULE_ID}.${key}`) ) throw new Error(`unknown setting: ${key}`);
+        const before = game.settings.get(MODULE_ID, key);
+        if ( value !== undefined ) await game.settings.set(MODULE_ID, key, value);
+        return { key, before, now: game.settings.get(MODULE_ID, key) };
+      },
+      /** Qui verrait qui sur la scène affichée (sans rien engager) : `{ tokens: [noms], causes }`. */
+      vus: () => {
+        const { tokens, causes } = engagementsOn(canvas.scene);
+        return { tokens: tokens.map(t => t.name), causes };
+      },
+      /** Juger la scène maintenant (comme après un déplacement) : `{ combat, added }`. */
+      engager: async () => {
+        const r = await checkEngagement();
+        return r ? { combat: r.combat?.id ?? null, added: r.added.map(t => t.name) } : null;
+      },
+      plan: ({ tokenId }={}) => {
+        const { plan, view } = planFor(tokenOf(tokenId));
+        return { plan: plan.type === "attack" ? { ...plan, attack: { name: plan.attack.name, id: plan.attack.id, mode: plan.mode } } : plan,
+          enemies: view.enemies.map(e => ({ name: e.name, distance: e.distance, appearance: e.appearance })) };
+      },
+      pilote: async ({ tokenId, mode }={}) => {
+        const token = tokenOf(tokenId);
+        return { mode: mode === undefined ? pilotOf(token) : await setPilot(token, mode), refus: refusal(token) };
+      },
+      jouer: async ({ tokenId }={}) => {
+        const token = tokenOf(tokenId);
+        return playTurn(token, game.combat?.combatants?.find(c => c.tokenId === token.id) ?? null);
       },
       cibles: ({ tokenId }={}) => {
         const { profile, targets, view, problems } = targetsOf(tokenOf(tokenId));

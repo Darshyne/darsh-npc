@@ -1,0 +1,83 @@
+/**
+ * Planifier un tour (SPEC §9.1-3, §9.2) — étape 2 du plan (§16) : attaquer la meilleure cible **déjà à portée**, sinon rendre la
+ * main. Pas de déplacement ici (étape 3). Pur et déterministe : pas d'aléa, pas de Foundry.
+ *
+ * Une attaque (mise à plat par l'adaptateur, distances en cases) :
+ *   { id, item, name, melee, ranged, reach, normal, long, damage, equipped, unarmed }
+ *   reach    allonge au contact, en cases (1 = 5 ft) ; 0 si l'attaque n'est pas de contact
+ *   normal   portée normale à distance, en cases ; 0 si l'attaque ne tire pas
+ *   long     portée longue, en cases (≥ normal)
+ * Distance entre deux emprises en cases, 0 = au contact (adapter/view.mjs, `footprintDistance`).
+ */
+import { scoreTargets } from "./targets.mjs";
+
+/** Chance de toucher supposée quand la vue ne la connaît pas (le moteur ne la publie pas encore : SPEC §14.2 R8). */
+export const DEFAULT_HIT = 0.6;
+
+/**
+ * Cette attaque atteint-elle un ennemi à `distance` cases (0 = au contact), et à quel prix ? Rend `{ mode, factor }` ou null.
+ *   mode    `melee` | `ranged` | `long`
+ *   factor  ce que vaut le coup, relatif (le Désavantage divise par deux : portée longue, ou tir au contact d'un ennemi)
+ */
+export function reachOf(attack, distance, { threatened=false }={}) {
+  if ( !attack || !Number.isFinite(distance) ) return null;
+  if ( attack.melee && (attack.reach > 0) && (distance <= attack.reach - 1) ) return { mode: "melee", factor: 1 };
+  if ( attack.ranged && (attack.normal > 0) ) {
+    // Une case de distance de bord à bord : la cible est à (distance + 1) cases du tireur.
+    const cells = distance + 1;
+    const disadvantage = threatened ? 0.5 : 1;   // PHB 2024 : tirer avec un ennemi au contact donne le Désavantage
+    if ( cells <= attack.normal ) return { mode: "ranged", factor: disadvantage };
+    if ( cells <= Math.max(attack.long, attack.normal) ) return { mode: "long", factor: 0.5 * disadvantage };
+  }
+  return null;
+}
+
+/**
+ * La meilleure attaque contre cet ennemi, parmi celles permises : `chance × dégâts moyens × facteur`. Une arme non tenue ou les
+ * mains nues ne servent que s'il n'y a rien d'autre. Rend `{ attack, mode, value }` ou null.
+ * @param {object[]} attacks
+ * @param {{distance:number, hitChance?:number|null}} enemy
+ * @param {{allowed?: Set<string>|null, threatened?: boolean}} [options]   `allowed` : ids d'items encore jouables (Attaques multiples).
+ */
+export function chooseAttack(attacks, enemy, { allowed=null, threatened=false }={}) {
+  const chance = Number.isFinite(enemy?.hitChance) ? enemy.hitChance : DEFAULT_HIT;
+  let best = null;
+  for ( const attack of attacks ?? [] ) {
+    if ( allowed && !allowed.has(attack.item) ) continue;
+    const reach = reachOf(attack, enemy.distance, { threatened });
+    if ( !reach ) continue;
+    const fallback = (!attack.equipped || attack.unarmed) ? 0.25 : 1;
+    const value = chance * Math.max(0.5, attack.damage ?? 0) * reach.factor * fallback;
+    // À valeur égale, l'attaque sans Désavantage l'emporte.
+    const better = !best || (value > best.value + 1e-9) || ((Math.abs(value - best.value) <= 1e-9) && (reach.factor > best.factor));
+    if ( better ) best = { attack, mode: reach.mode, value, factor: reach.factor };
+  }
+  return best;
+}
+
+/**
+ * L'intention du tour : la première cible du classement (§8) qu'une attaque permise atteint d'où l'on est.
+ * Rend `{ type: "attack", target, attack, mode, reasons, score }` ou `{ type: "yield", reason }`.
+ *   reasons   `noEnemy` (aucun ennemi perçu debout) | `noAttack` (aucune attaque sur la fiche, ou plus aucune permise)
+ *             | `outOfReach` (des ennemis, aucun à portée : il faudrait bouger — étape 3)
+ * @param {import("./view.mjs").View} view
+ * @param {object} profile
+ * @param {object[]} enmities
+ * @param {object[]} attacks
+ * @param {{allowed?: Set<string>|null}} [options]
+ */
+export function planAttack(view, profile, enmities, attacks, { allowed=null }={}) {
+  const ranked = scoreTargets(view, profile, enmities);
+  if ( !ranked.length ) return { type: "yield", reason: "noEnemy" };
+  const usable = (attacks ?? []).filter(a => !allowed || allowed.has(a.item));
+  if ( !usable.length ) return { type: "yield", reason: "noAttack" };
+  const threatened = (view.enemies ?? []).some(e => !e.down && (e.distance === 0));
+  const byId = new Map((view.enemies ?? []).map(e => [e.id, e]));
+  for ( const scored of ranked ) {
+    const enemy = byId.get(scored.id);
+    if ( !enemy ) continue;
+    const pick = chooseAttack(usable, enemy, { allowed, threatened });
+    if ( pick ) return { type: "attack", target: enemy.id, attack: pick.attack, mode: pick.mode, reasons: scored.reasons, score: scored.score };
+  }
+  return { type: "yield", reason: "outOfReach" };
+}

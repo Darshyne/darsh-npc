@@ -1,2 +1,8 @@
 /* DAS · Automated NPC — rien à habiller pour l'instant (étape 1 : lecture seule). Les classes stables viendront avec le HUD (SPEC §12). */
 .darsh-npc-hidden { display: none; }
+
+/* Carte de trace du pilote (MJ seulement). */
+.dnpc-trace h4 { margin: 0 0 0.3em; display: flex; align-items: center; gap: 0.4em; }
+.dnpc-trace ul { margin: 0; padding-left: 1.2em; }
+.dnpc-trace .dnpc-yield { margin: 0.3em 0 0; font-style: italic; }
+.control-icon.dnpc-pilot.active { color: var(--color-warm-1, #ff6400); }

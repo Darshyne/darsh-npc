@@ -49,6 +49,7 @@ export function factsOf(actor) {
         melee: !typed,
         spell: activity.attack?.type?.classification === "spell",
         unarmed: activity.attack?.type?.classification === "unarmed",
+        thrown,
         equipped: (item.type !== "weapon") || (item.system?.equipped !== false),
         weaponType: (item.type === "weapon") ? (item.system?.type?.value ?? null) : null,
         range,

@@ -30,7 +30,22 @@ appearance, armour, role) and the **ranked targets** it would pick, without acti
 `game.modules.get("darsh-npc").api.ai.profile(actor, token)`, `.view(token)`, `.targets(token)`,
 `.register(source, { profiles, enmities })`. Two world settings: the NPC automation level (default **Off**) and omniscient NPCs.
 
-Roadmap: 2 minimal turn (attack a target already in reach) · 3 movement · 4 morale, confirm mode, takeover · 5 catch phrases ·
+**0.2.0 — step 2, the minimal turn (alpha).** With the NPC automation level set to **Combat** and a token's **autopilot** on
+(brain button of the token HUD, or the world default "on for Hostile tokens"), on that token's turn the GM's client attacks the
+best target **already in reach** — melee, ranged or thrown, picking the attack by expected damage, chaining Multiattack and Extra
+Attack as long as the engine grants attacks — then ends the turn. A private **trace card** tells the GM what was played and why
+(or why the turn is handed back: no enemy in reach — movement comes at step 3 —, incapacitated, an order such as Command, paused,
+time limit). Never a player character, a player-owned or a Secret token. API: `.plan(token)` (the intent, without playing it),
+`.play(token)`, `.autopilot(token, "on" | "off")`.
+
+**Automatic combat**, also in 0.2.0: when a GM creature **sees** a creature hostile to it (the engine's vision rules: light,
+walls, darkvision, Invisible — so a successful Hide —, Blinded), or when a creature **is attacked**, the combat starts on its own —
+**even with the AI off**. Only the creatures concerned join: a player character no hostile creature sees stays out of the combat, and
+joins as soon as one sees it, so some characters can be in the combat and others not. NPC initiative is rolled; players roll theirs;
+the combat begins once everyone has one. Two toggles in the **token tool bar** (GM): **NPC AI** (brain) and **Automatic combat**
+(crossed swords), both off by default.
+
+Roadmap: 3 movement · 4 morale, confirm mode, takeover · 5 catch phrases ·
 6 Regions and real time · 7 engagement and reinforcements · 7 bis scene snapshot · 8 abilities declared by the engine's content ·
 9 hatreds and registered tables · 9 bis schedules.
 
