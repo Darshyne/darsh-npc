@@ -12,7 +12,7 @@
 import { MODULE_ID, log, setting } from "../shared.mjs";
 import { levelAtLeast } from "../adapter/settings.mjs";
 import * as engine from "../adapter/engine.mjs";
-import { allied, hostile, footprintOf } from "../adapter/view.mjs";
+import { allied, hostile, footprintOf, footprintDistance } from "../adapter/view.mjs";
 import { PATROL_TYPE, POST_TYPE, behaviorOf, regionHas } from "../adapter/behaviors.mjs";
 import { step, facingToward, routePoints, nextWaypoint, nearestWaypoint, nextGlance, SCANS } from "../core/alert.mjs";
 import { profileFor } from "./profile.mjs";
@@ -67,7 +67,11 @@ function seenEnemy(token, all) {
   let best = null, bestD = Infinity;
   for ( const other of all ) {
     if ( (other === token) || !able(other) || !hostile(token, other) ) continue;
-    if ( engine.canSee(token, other) !== true ) continue;
+    // Vu, ou à côté (2026-10-14 : on trouve un ennemi non caché sur une case adjacente, même dans le noir ou dans son dos).
+    // Il faut au moins un sens : Assourdie et Aveuglée à la fois, elle ne remarque rien.
+    const senseless = ["deafened", "blinded"].every(s => token.actor?.statuses?.has(s));
+    const touching = !senseless && !engine.isHidden(other) && (footprintDistance(footprintOf(token), footprintOf(other)) === 0);
+    if ( !touching && (engine.canSee(token, other) !== true) ) continue;
     const at = centreOf(other);
     const d = Math.hypot(at.x - me.x, at.y - me.y);
     if ( d < bestD ) { best = at; bestD = d; }
@@ -342,6 +346,32 @@ export async function forget(token) {
   await token.unsetFlag(MODULE_ID, "alert").catch(() => {});
 }
 
+/** Portée à laquelle on entend marcher une créature qui ne se cache pas (cases). */
+const NOISE_CELLS = 6;
+
+/**
+ * Un token bouge : les créatures menées qui ne le voient pas mais l'entendent (moteur §186 : pas caché, aucun mur ni plancher entre
+ * eux, pas Assourdies), à 6 cases au plus, ont un doute vers lui (demande de l'utilisateur, 2026-10-14 : marcher dans l'ombre sans se
+ * cacher alerte quand même — elles vont voir).
+ */
+function onNoise(mover) {
+  if ( !isActiveGM() || !running() || !mover?.actor || mover.hidden || engine.isHidden(mover) || fighting(mover) ) return;
+  const scene = mover.parent;
+  if ( scene !== canvas.scene ) return;
+  const at = centreOf(mover);
+  const radius = NOISE_CELLS * scene.grid.size;
+  for ( const npc of scene.tokens ) {
+    if ( (npc === mover) || !able(npc) || !driven(npc) || fighting(npc) || !hostile(npc, mover) ) continue;
+    const me = centreOf(npc);
+    if ( Math.hypot(at.x - me.x, at.y - me.y) > radius ) continue;
+    if ( engine.canSee(npc, mover) === true ) continue;   // vu : l'horloge s'en charge
+    if ( engine.canHear(npc, mover) !== true ) continue;
+    const mem = memOf(npc);
+    if ( ["alert", "searching"].includes(mem.state) ) continue;
+    hear(npc, at);
+  }
+}
+
 /** Tout le monde au calme : mémoire oubliée, flags d'alerte retirés sur les scènes (l'IA coupée). */
 export async function calmAll() {
   memory.clear();
@@ -383,6 +413,8 @@ export function registerClock() {
     mem.base = null;   // sa direction de référence se relira là où le MJ l'a posée
     mem.glance = null;
   });
+  // Un pas entendu dans l'ombre.
+  Hooks.on("updateToken", (token, changes) => { if ( ("x" in changes) || ("y" in changes) ) onNoise(token); });
   // Un combat fini : ceux qui en sortent repartent de « confus » (ils cherchent encore, puis rentrent).
   Hooks.on("deleteCombat", combat => {
     for ( const c of combat.combatants ) {

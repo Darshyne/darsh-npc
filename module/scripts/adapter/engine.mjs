@@ -222,3 +222,15 @@ export async function setStance(token, stance) {
 export function onStealthNoticed(fn) {
   Hooks.on("dnd5e-combat.stealthNoticed", fn);
 }
+
+/** L'observateur entend-il la cible (moteur §186 : murs, planchers, Assourdi, cible cachée ; sans portée) ? null sans moteur qui le publie. */
+export function canHear(observer, target) {
+  const api = engine();
+  return typeof api?.vision?.canHear === "function" ? api.vision.canHear(observer, target) : null;
+}
+
+/** La cible est-elle cachée (Furtivité du moteur, §185) ? */
+export function isHidden(token) {
+  const api = engine();
+  return typeof api?.sneak?.is === "function" ? !!api.sneak.is(token) : false;
+}

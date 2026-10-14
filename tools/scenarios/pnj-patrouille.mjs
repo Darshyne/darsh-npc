@@ -95,6 +95,8 @@ export default {
     const flag = (await npc("alerte", { tokenId: zombi.id })).flag;
     ctx.expect(flag?.state === "alert", "le marqueur « ! » est posé (flag d'alerte)");
     await ctx.call("set-status", { tokenId: guerrier.id, statusId: "invisible", active: true });
+    // Invisible n'est pas caché : resté là, il serait trouvé au contact ou entendu (2026-10-14). Il s'éloigne, hors de portée d'oreille.
+    await put(guerrier, 25, 25);
     ctx.expect(await watch(s => s === "searching", 8), `Guerrier invisible : il cherche (${seen.join(" → ")})`);
     ctx.expect(await watch(s => s === "confused", 30), `rien trouvé : confus (${seen.join(" → ")})`);
     ctx.expect(await watch(s => s === "idle", 15), `puis au calme (${seen.join(" → ")})`);

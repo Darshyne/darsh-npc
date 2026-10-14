@@ -16,7 +16,7 @@
  */
 import { MODULE_ID, loc, log, setting, escape } from "../shared.mjs";
 import * as engine from "../adapter/engine.mjs";
-import { hostile } from "../adapter/view.mjs";
+import { hostile, footprintOf, footprintDistance } from "../adapter/view.mjs";
 import { haltAll } from "./pilot.mjs";
 import { calmAll } from "./clock.mjs";
 import { barkSpotted } from "./barks.mjs";
@@ -57,7 +57,10 @@ export function engagementsOn(scene) {
     for ( const target of all ) {
       if ( (target === observer) || !hostile(observer, target) ) continue;
       if ( !playerHere && !isPlayerSide(target) ) continue;
-      if ( engine.canSee(observer, target) !== true ) continue;
+      // Vu, ou un ennemi non caché sur une case adjacente (trouvé au contact, 2026-10-14).
+      const senseless = ["deafened", "blinded"].every(s => observer.actor?.statuses?.has(s));
+      const touching = !senseless && !engine.isHidden(target) && (footprintDistance(footprintOf(observer), footprintOf(target)) === 0);
+      if ( !touching && (engine.canSee(observer, target) !== true) ) continue;
       tokens.set(observer.id, observer);
       tokens.set(target.id, target);
       causes.push({ observer: observer.name, target: target.name, observerId: observer.id });
