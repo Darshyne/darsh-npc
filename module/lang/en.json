@@ -187,5 +187,14 @@
   "DNPC.Affecter.route": "Patrol",
   "DNPC.Affecter.post": "Post",
   "DNPC.Affecter.Ok": "Assign",
-  "DNPC.Affecter.Rien": "No patrol or guard post on this scene: add the \"Patrol (DAS)\" or \"Guard post (DAS)\" behavior to a region."
+  "DNPC.Affecter.Rien": "No patrol or guard post on this scene: add the \"Patrol (DAS)\" or \"Guard post (DAS)\" behavior to a region.",
+  "DNPC.Poste.FIELDS.scan.label": "Looks around",
+  "DNPC.Poste.FIELDS.scan.hint": "At rest, the guard turns its head now and then around its facing, then comes back to it (its vision cone follows).",
+  "DNPC.Balayage.default": "As the world setting",
+  "DNPC.Balayage.none": "Never",
+  "DNPC.Balayage.narrow": "A little (±45°)",
+  "DNPC.Balayage.wide": "Widely (±90°)",
+  "DNPC.Balayage.full": "All around (even behind)",
+  "DNPC.Reglage.Balayage.Nom": "Resting creatures look around",
+  "DNPC.Reglage.Balayage.Indic": "A creature driven by the AI, calm and still (guard post, or where the GM placed it), turns its head now and then around its reference facing, then comes back; its vision cone follows. Mindless creatures do it less often and at random. A guard post can have its own setting."
 }

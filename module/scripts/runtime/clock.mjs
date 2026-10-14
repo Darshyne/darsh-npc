@@ -14,7 +14,8 @@ import { levelAtLeast } from "../adapter/settings.mjs";
 import * as engine from "../adapter/engine.mjs";
 import { allied, hostile, footprintOf } from "../adapter/view.mjs";
 import { PATROL_TYPE, POST_TYPE, behaviorOf, regionHas } from "../adapter/behaviors.mjs";
-import { step, facingToward, routePoints, nextWaypoint, nearestWaypoint } from "../core/alert.mjs";
+import { step, facingToward, routePoints, nextWaypoint, nearestWaypoint, nextGlance, SCANS } from "../core/alert.mjs";
+import { profileFor } from "./profile.mjs";
 import { pilotOf, refusal } from "./pilot.mjs";
 import { bark } from "./barks.mjs";
 import { check as checkEngagement } from "./engage.mjs";
@@ -220,7 +221,7 @@ async function doRoutine(token, routine, mem, now) {
   if ( routine?.kind === "post" ) {
     const sys = routine.behavior.system ?? {};
     if ( mem.arrived ) { mem.arrived = false; mem.waitUntil = now + 6000 + (Math.random() * 8000); }
-    if ( Number.isFinite(sys.facing) && (now >= mem.waitUntil - 4000) ) {
+    if ( Number.isFinite(sys.facing) && (now >= mem.waitUntil - 4000) && !mem.glance?.away ) {
       const diff = Math.abs((((token.rotation - sys.facing) % 360) + 540) % 360 - 180);
       if ( diff > 15 ) await token.update({ rotation: sys.facing }).catch(() => {});
     }
@@ -267,6 +268,29 @@ async function tickToken(token, all, now) {
     case "home": goHome(token, routine, mem); break;
     case "routine": await doRoutine(token, routine, mem, now); break;
   }
+  if ( next.state === "idle" ) await lookAround(token, routine, mem, now, input.atHome);
+  else { mem.glance = null; mem.base = null; }
+}
+
+/**
+ * Regarder autour de soi (demande de l'utilisateur, 2026-10-14) : au calme, immobile, chez elle (poste, ou point de départ), une créature
+ * tourne la tête de temps en temps autour de sa direction de référence — l'orientation du poste, sinon celle qu'elle avait en se
+ * posant — et y revient. Le cône de vision du moteur suit la rotation. Pas en patrouille (elle regarde où elle marche).
+ */
+async function lookAround(token, routine, mem, now, atHome) {
+  if ( mem.walking ) { mem.glance = null; mem.base = null; return; }
+  if ( !atHome || (routine?.kind === "route") ) return;
+  const sys = (routine?.kind === "post") ? (routine.behavior.system ?? {}) : {};
+  const scan = (sys.scan && (sys.scan in SCANS)) ? sys.scan : (setting("scanDefault") ?? "none");
+  const base = Number.isFinite(sys.facing) ? sys.facing : (mem.base ??= (token.rotation ?? 0));
+  let mindless = false;
+  try { mindless = profileFor(token.actor, token)?.courage === "mindless"; } catch { /* profil illisible : allure normale */ }
+  const r = nextGlance(mem.glance ?? null, { base, scan, now, rng: Math.random, mindless });
+  if ( !r ) return;
+  mem.glance = r.glance;
+  if ( r.rotation === null ) return;
+  const diff = Math.abs((((token.rotation - r.rotation) % 360) + 540) % 360 - 180);
+  if ( diff > 5 ) await token.update({ rotation: r.rotation }).catch(() => {});
 }
 
 /** Passé en alerte : réplique, les alliés proches entendent, et l'engagement juge la scène. */
@@ -330,6 +354,11 @@ export async function calmAll() {
 let timer = null;
 
 export function registerClock() {
+  game.settings.register(MODULE_ID, "scanDefault", {
+    name: "DNPC.Reglage.Balayage.Nom", hint: "DNPC.Reglage.Balayage.Indic", scope: "world", config: true, type: String,
+    choices: { none: "DNPC.Balayage.none", narrow: "DNPC.Balayage.narrow", wide: "DNPC.Balayage.wide", full: "DNPC.Balayage.full" },
+    default: "narrow"
+  });
   Hooks.once("ready", () => {
     timer = setInterval(() => { tick().catch(err => log.error("clock failed", err)); }, TICK_MS);
   });
@@ -346,6 +375,8 @@ export function registerClock() {
     const mem = memory.get(token.id);
     if ( !mem || mem.walking || fighting(token) ) return;
     mem.home = centreOf(token);
+    mem.base = null;   // sa direction de référence se relira là où le MJ l'a posée
+    mem.glance = null;
   });
   // Un combat fini : ceux qui en sortent repartent de « confus » (ils cherchent encore, puis rentrent).
   Hooks.on("deleteCombat", combat => {

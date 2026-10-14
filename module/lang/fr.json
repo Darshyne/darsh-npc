@@ -187,5 +187,14 @@
   "DNPC.Affecter.route": "Patrouille",
   "DNPC.Affecter.post": "Poste",
   "DNPC.Affecter.Ok": "Affecter",
-  "DNPC.Affecter.Rien": "Aucune patrouille ni aucun poste sur cette scène : ajoutez à une région le comportement « Patrouille (DAS) » ou « Poste de garde (DAS) »."
+  "DNPC.Affecter.Rien": "Aucune patrouille ni aucun poste sur cette scène : ajoutez à une région le comportement « Patrouille (DAS) » ou « Poste de garde (DAS) ».",
+  "DNPC.Poste.FIELDS.scan.label": "Regarde autour",
+  "DNPC.Poste.FIELDS.scan.hint": "Au repos, le garde tourne la tête de temps en temps autour de son orientation, puis y revient (son cône de vision suit).",
+  "DNPC.Balayage.default": "Comme le réglage du monde",
+  "DNPC.Balayage.none": "Jamais",
+  "DNPC.Balayage.narrow": "Un peu (±45°)",
+  "DNPC.Balayage.wide": "Largement (±90°)",
+  "DNPC.Balayage.full": "Tout autour (jusque derrière)",
+  "DNPC.Reglage.Balayage.Nom": "Les créatures au repos regardent autour",
+  "DNPC.Reglage.Balayage.Indic": "Une créature menée par l'IA, au calme et immobile (poste de garde, ou là où le MJ l'a posée), tourne la tête de temps en temps autour de sa direction de référence, puis y revient ; son cône de vision suit. Les créatures sans esprit le font plus rarement et au hasard. Un poste de garde peut avoir son propre réglage."
 }

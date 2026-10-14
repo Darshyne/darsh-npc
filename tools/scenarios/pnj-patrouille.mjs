@@ -20,7 +20,7 @@ export default {
     const zombi = await ctx.token("Zombi");
     const guerrier = await ctx.token("Guerrier");
     const bandit = await ctx.token("Bandit");
-    for ( const [key, value] of [["level", "patrols"], ["aiEnabled", true], ["autoEngage", false], ["barkMode", "off"]] ) {
+    for ( const [key, value] of [["level", "patrols"], ["aiEnabled", true], ["autoEngage", false], ["barkMode", "off"], ["scanDefault", "none"]] ) {
       const r = await npc("reglage", { key, value });
       ctx.restore(() => npc("reglage", { key, value: r.before }));
     }

@@ -41,7 +41,10 @@ function behaviorClasses() {
       return {
         label: new fields.StringField({ required: true, blank: true, initial: "" }),
         facing: new fields.NumberField({ required: false, nullable: true, min: 0, max: 359, step: 1, initial: null }),
-        wander: new fields.BooleanField({ initial: true })
+        wander: new fields.BooleanField({ initial: true }),
+        scan: new fields.StringField({ required: true, blank: true, initial: "",
+          choices: { "": "DNPC.Balayage.default", none: "DNPC.Balayage.none", narrow: "DNPC.Balayage.narrow", wide: "DNPC.Balayage.wide",
+            full: "DNPC.Balayage.full" } })
       };
     }
     static events = {};

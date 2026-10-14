@@ -127,3 +127,37 @@ export function nearestWaypoint(points, at) {
   });
   return best;
 }
+
+/* -------------------------------------------- */
+/*  Regarder autour de soi (2026-10-14)          */
+/* -------------------------------------------- */
+
+/** Amplitude du balayage d'une créature au repos, en degrés de part et d'autre de sa direction de référence. */
+export const SCANS = Object.freeze({ none: 0, narrow: 45, wide: 90, full: 180 });
+
+/** Entre deux coups d'œil (ms) ; le coup d'œil lui-même dure de quoi voir. */
+export const GLANCE_GAP_MS = Object.freeze([6000, 14000]);
+export const GLANCE_HOLD_MS = Object.freeze([2500, 5000]);
+
+const between = ([a, b], rng) => a + (rng() * (b - a));
+const norm = deg => ((Math.round(deg) % 360) + 360) % 360;
+
+/**
+ * Le prochain mouvement de tête d'une créature au repos, ou null s'il n'y a rien à faire maintenant.
+ * `glance` : `{ at, away }` (quand agir ; regarde-t-elle ailleurs). Elle regarde d'un côté (entre la moitié et toute l'amplitude),
+ * puis revient à sa direction de référence. Une créature sans esprit tourne plus rarement, n'importe où dans l'amplitude.
+ * @param {{at?: number, away?: boolean}|null} glance
+ * @param {{base: number, scan: string, now: number, rng: () => number, mindless?: boolean}} opts
+ * @returns {{rotation: number|null, glance: {at: number, away: boolean}}|null}
+ */
+export function nextGlance(glance, { base, scan, now, rng, mindless=false }) {
+  const amp = SCANS[scan] ?? 0;
+  if ( !amp ) return null;
+  const slow = mindless ? 1.8 : 1;
+  if ( !glance ) return { rotation: null, glance: { at: now + (between(GLANCE_GAP_MS, rng) * slow), away: false } };
+  if ( now < glance.at ) return null;
+  if ( glance.away ) return { rotation: norm(base), glance: { at: now + (between(GLANCE_GAP_MS, rng) * slow), away: false } };
+  const side = rng() < 0.5 ? -1 : 1;
+  const offset = mindless ? ((rng() * 2) - 1) * amp : side * ((amp / 2) + (rng() * amp / 2));
+  return { rotation: norm(base + offset), glance: { at: now + between(GLANCE_HOLD_MS, rng), away: true } };
+}
