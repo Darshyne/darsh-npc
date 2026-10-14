@@ -214,3 +214,11 @@ export async function setStance(token, stance) {
   const api = engine();
   if ( typeof api?.factions?.stance === "function" ) await api.factions.stance(token, stance);
 }
+
+/**
+ * La Furtivité « BG3 » du moteur (§184) : `fn(observer, target, { level: "suspicious" | "spotted", point, reason })` quand une créature
+ * doute ou repère un PJ furtif. Sans moteur qui la publie, rien n'arrive.
+ */
+export function onStealthNoticed(fn) {
+  Hooks.on("dnd5e-combat.stealthNoticed", fn);
+}

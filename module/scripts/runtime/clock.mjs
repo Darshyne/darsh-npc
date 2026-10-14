@@ -369,6 +369,11 @@ export function registerClock() {
     for ( const mem of memory.values() ) mem.walking = false;
   });
   Hooks.on("canvasReady", () => memory.clear());
+  // §184 du moteur : un PJ furtif a fait douter une créature menée — elle se tourne et va voir (repéré, sa vue le voit déjà).
+  engine.onStealthNoticed((observer, target, { level, point }={}) => {
+    if ( !isActiveGM() || (level !== "suspicious") || !observer || !driven(observer) || fighting(observer) ) return;
+    hear(observer, point ?? centreOf(target));
+  });
   // Un token déplacé par le MJ (pas par une marche de l'IA), hors combat : sa nouvelle place devient son point de départ.
   Hooks.on("updateToken", (token, changes) => {
     if ( !isActiveGM() || !(("x" in changes) || ("y" in changes)) ) return;
