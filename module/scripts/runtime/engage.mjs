@@ -18,6 +18,7 @@ import { MODULE_ID, loc, log, setting, escape } from "../shared.mjs";
 import * as engine from "../adapter/engine.mjs";
 import { hostile } from "../adapter/view.mjs";
 import { haltAll } from "./pilot.mjs";
+import { calmAll } from "./clock.mjs";
 import { barkSpotted } from "./barks.mjs";
 
 const isActiveGM = () => game.users.activeGM?.isSelf === true;
@@ -170,6 +171,9 @@ export function registerEngage() {
       if ( on && game.user.isGM && (setting("level") === "off") ) game.settings.set(MODULE_ID, "level", "combat");
       // Coupée (bouton ou Ctrl+Alt+N, §13) : les cartes de confirmation tranchées, tous les MJ prévenus.
       if ( !on ) { haltAll(); if ( game.user.isGM ) ui.notifications.info(loc("Pilote.Coupe")); }
+      // Coupée : les témoins de comportement disparaissent, et le MJ actif efface les états d'alerte (rallumée, tout repart du calme).
+      if ( !on && isActiveGM() ) calmAll().catch(err => log.error("alert states not cleared", err));
+      Hooks.callAll(`${MODULE_ID}.aiToggled`, on);
     }
   });
   game.settings.register(MODULE_ID, "autoEngage", {

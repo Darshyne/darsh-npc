@@ -12,7 +12,7 @@
 import { MODULE_ID, log, setting } from "../shared.mjs";
 import { levelAtLeast } from "../adapter/settings.mjs";
 import * as engine from "../adapter/engine.mjs";
-import { allied, hostile } from "../adapter/view.mjs";
+import { allied, hostile, footprintOf } from "../adapter/view.mjs";
 import { PATROL_TYPE, POST_TYPE, behaviorOf, regionHas } from "../adapter/behaviors.mjs";
 import { step, facingToward, routePoints, nextWaypoint, nearestWaypoint } from "../core/alert.mjs";
 import { pilotOf, refusal } from "./pilot.mjs";
@@ -85,18 +85,65 @@ function walkTo(token, point, purpose) {
   const grid = token.parent.grid;
   const c = grid.getOffset({ x: point.x, y: point.y });
   const key = `${c.i}.${c.j}`;
-  const exact = (purpose !== "search") && (mem.failedAt !== key);
-  const cells = exact ? [{ i: c.i, j: c.j }] : [];
+  let exact = (purpose !== "search") && (mem.failedAt !== key);
+  let cells = exact ? [{ i: c.i, j: c.j }] : [];
   if ( !exact ) for ( const di of [0, -1, 1] ) for ( const dj of [0, -1, 1] ) cells.push({ i: c.i + di, j: c.j + dj });
+  // Pas deux créatures sur la même case (demande de l'utilisateur, 2026-10-14) : ni une case occupée, ni une case qu'une autre marche
+  // vise déjà ; à défaut, les cases libres les plus proches. Une créature Très petite ou une nuée peut partager une case.
+  if ( !sharesSpace(token) ) {
+    const taken = takenCells(token);
+    const free = cells.filter(cell => !taken.has(`${cell.i}.${cell.j}`));
+    if ( free.length < cells.length ) {
+      if ( exact ) { exact = false; mem.failedAt = key; }   // détourné : la routine acceptera d'arriver à côté
+      cells = free.length ? free : nearestFree(c, taken);
+    }
+    if ( !cells.length ) return;
+  }
   mem.walking = true;
   mem.purpose = purpose;
+  mem.dest = cells.map(cell => `${cell.i}.${cell.j}`);
   engine.approachCells(token, cells, token._source.level ?? null)
     .catch(err => { log.warn(`${token.name}: walk failed`, err); return { arrived: false }; })
     .then(result => {
       mem.walking = false;
+      mem.dest = null;
       mem.arrived = true;
-      mem.failedAt = (exact && !result?.arrived) ? key : null;
+      if ( exact ) mem.failedAt = result?.arrived ? null : key;
     });
+}
+
+/** Peut-elle finir dans l'espace d'une autre créature ? Très petite, ou nuée. */
+function sharesSpace(token) {
+  const actor = token.actor;
+  return (actor?.system?.traits?.size === "tiny") || !!actor?.system?.details?.type?.swarm;
+}
+
+/** Les cases prises pour ce token : celles des autres tokens de la scène (vivants, non cachés), et celles que visent les autres marches. */
+function takenCells(token) {
+  const taken = new Set();
+  for ( const other of token.parent.tokens ) {
+    if ( (other === token) || other.hidden || !other.actor ) continue;
+    if ( (other.actor.system?.attributes?.hp?.value ?? 1) <= 0 ) continue;   // un corps se traverse et s'enjambe
+    const f = footprintOf(other);
+    for ( let i = f.i0; i <= f.i1; i++ ) for ( let j = f.j0; j <= f.j1; j++ ) taken.add(`${i}.${j}`);
+    const mem = memory.get(other.id);
+    if ( mem?.walking && mem.dest ) for ( const k of mem.dest ) taken.add(k);
+  }
+  return taken;
+}
+
+/** Les cases libres les plus proches d'une case, anneau par anneau (trois au plus). */
+function nearestFree(center, taken) {
+  for ( let r = 1; r <= 3; r++ ) {
+    const ring = [];
+    for ( let di = -r; di <= r; di++ ) for ( let dj = -r; dj <= r; dj++ ) {
+      if ( Math.max(Math.abs(di), Math.abs(dj)) !== r ) continue;
+      const cell = { i: center.i + di, j: center.j + dj };
+      if ( !taken.has(`${cell.i}.${cell.j}`) ) ring.push(cell);
+    }
+    if ( ring.length ) return ring;
+  }
+  return [];
 }
 
 /** Se tourner vers un point (orientation du token, donnée du token). */
@@ -269,6 +316,15 @@ export function hear(token, point) {
 export async function forget(token) {
   memory.delete(token.id);
   await token.unsetFlag(MODULE_ID, "alert").catch(() => {});
+}
+
+/** Tout le monde au calme : mémoire oubliée, flags d'alerte retirés sur les scènes (l'IA coupée). */
+export async function calmAll() {
+  memory.clear();
+  for ( const scene of game.scenes ) {
+    const updates = scene.tokens.filter(t => t.getFlag(MODULE_ID, "alert")).map(t => ({ _id: t.id, flags: { [MODULE_ID]: { alert: new foundry.data.operators.ForcedDeletion() } } }));
+    if ( updates.length ) await scene.updateEmbeddedDocuments("Token", updates);
+  }
 }
 
 let timer = null;

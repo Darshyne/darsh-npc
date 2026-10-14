@@ -9,7 +9,7 @@
  *   drapeau blanc   s'est rendu (§9.5)                                       — vu de tous
  *   souffle         fuit (§9.5)                                              — MJ seulement
  */
-import { MODULE_ID } from "../shared.mjs";
+import { MODULE_ID, setting } from "../shared.mjs";
 
 const NAME = "dnpc-marker";
 /** Un « ! » reste visible tant de temps quand le combat commence (le temps de le voir). */
@@ -25,8 +25,15 @@ const GLYPHS = {
 };
 
 /** Le marqueur à montrer pour ce token, ou null. */
-function glyphOf(token) {
+export function glyphOf(token) {
   const doc = token.document;
+  // IA coupée : plus aucun témoin de comportement (demande de l'utilisateur, 2026-10-14).
+  if ( !setting("aiEnabled") ) return null;
+  // Une créature morte, à 0 PV ou neutralisée ne montre plus rien.
+  const actor = doc.actor;
+  if ( !actor || ((actor.system?.attributes?.hp?.value ?? 1) <= 0) ) return null;
+  if ( ["dead", "unconscious", "incapacitated", "paralyzed", "petrified", "stunned", CONFIG.specialStatusEffects.DEFEATED]
+    .some(s => actor.statuses?.has(s)) ) return null;
   const morale = doc.getFlag(MODULE_ID, "morale")?.state ?? null;
   if ( morale && GLYPHS[morale] ) return GLYPHS[morale].gm && !game.user.isGM ? null : GLYPHS[morale];
   const alert = doc.getFlag(MODULE_ID, "alert");
@@ -74,5 +81,13 @@ export function registerMarkers() {
     }
   });
   Hooks.on("createCombatant", combatant => draw(combatant.token?.object));
+  // PV et états : une créature qui meurt perd son marqueur.
+  const ofActor = actor => { for ( const t of actor?.getActiveTokens?.() ?? [] ) draw(t); };
+  Hooks.on("updateActor", (actor, changes) => { if ( changes.system?.attributes?.hp ) ofActor(actor); });
+  for ( const hook of ["createActiveEffect", "deleteActiveEffect", "updateActiveEffect"] ) {
+    Hooks.on(hook, effect => { if ( effect.parent?.documentName === "Actor" ) ofActor(effect.parent); });
+  }
+  // L'IA allumée ou coupée : tous les marqueurs de la scène.
+  Hooks.on(`${MODULE_ID}.aiToggled`, () => { for ( const t of canvas?.tokens?.placeables ?? [] ) draw(t); });
   Hooks.on("deleteCombat", combat => { for ( const c of combat.combatants ) draw(c.token?.object); });
 }

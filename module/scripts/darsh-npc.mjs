@@ -17,7 +17,7 @@ import { registerPilot, planFor, playTurn, pilotOf, setPilot, refusal } from "./
 import { registerEngage, check as checkEngagement, engagementsOn } from "./runtime/engage.mjs";
 import { registerMorale, moraleOf, setMorale } from "./runtime/morale.mjs";
 import { registerConfirm, answer as answerConfirm } from "./runtime/confirm.mjs";
-import { registerMarkers } from "./ui/markers.mjs";
+import { registerMarkers, glyphOf } from "./ui/markers.mjs";
 import { registerBarks, bark, lineFor } from "./runtime/barks.mjs";
 import { registerBarksEditor } from "./ui/barks-editor.mjs";
 import { registerBehaviors } from "./adapter/behaviors.mjs";
@@ -181,6 +181,8 @@ Hooks.once("ready", () => {
         if ( reset ) await forget(token);
         return { ...alertOf(token), flag: token.getFlag(MODULE_ID, "alert") ?? null };
       },
+      /** Le marqueur affiché au-dessus du token (texte), ou null. */
+      marqueur: ({ tokenId }={}) => ({ glyph: glyphOf(tokenOf(tokenId).object)?.text ?? null }),
       /** Un doute pour ce token (un bruit en `x`, `y`). */
       doute: ({ tokenId, x, y }={}) => { hear(tokenOf(tokenId), { x, y }); return { heard: { x, y } }; },
       /** Mettre le jeu en pause ou l'en sortir (scénarios du temps réel). */
