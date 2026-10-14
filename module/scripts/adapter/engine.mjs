@@ -199,3 +199,18 @@ export async function approachCells(token, cells, level=null) {
 export function stopWalks() {
   engine()?.stopWalks?.();
 }
+
+/**
+ * La relation de deux tokens selon les factions du moteur (moteur §181, SPEC §14.2 R11) : `hostile`, `neutral` ou `allied` (le moteur
+ * retombe lui-même sur les dispositions sans faction) ; null sans moteur qui la publie — la vue garde alors les dispositions.
+ */
+export function factionRelation(a, b) {
+  const api = engine();
+  return typeof api?.factions?.relation === "function" ? api.factions.relation(a, b) : null;
+}
+
+/** L'attitude d'un token pour le moteur (`"neutral"` : rendu, l'ennemi de personne) ; sans effet sans le moteur §181. */
+export async function setStance(token, stance) {
+  const api = engine();
+  if ( typeof api?.factions?.stance === "function" ) await api.factions.stance(token, stance);
+}

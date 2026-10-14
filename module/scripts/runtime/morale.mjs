@@ -77,6 +77,7 @@ async function surrender(token, combat) {
   const dropped = await engine.drop(token);
   const disposition = token.disposition;
   await token.update({ disposition: CONST.TOKEN_DISPOSITIONS.NEUTRAL });
+  await engine.setStance(token, "neutral");   // §181 : neutre aussi pour les factions du moteur
   await setMorale(token, { state: "surrendered", disposition }, combat);
   await bark(token, "surrender", { force: true });
   return { type: "surrender", dropped: dropped?.items ?? [] };
@@ -137,6 +138,7 @@ async function onResolution(resolution) {
     const state = moraleOf(token);
     if ( state.state !== "surrendered" ) continue;
     if ( Number.isFinite(state.disposition) ) await token.update({ disposition: state.disposition });
+    await engine.setStance(token, null);
     await setMorale(token, { state: "fleeing", fromSurrender: true, calm: 0 });
     log.info(`${token.name}: attacked after surrendering — flees if it can`);
   }

@@ -8,7 +8,7 @@
  */
 import { appearanceOf } from "../core/view.mjs";
 import { factsOf, armorWeightOf, roleOf } from "./sheet.mjs";
-import { canSee, movement, pathCost } from "./engine.mjs";
+import { canSee, movement, pathCost, factionRelation } from "./engine.mjs";
 import { MODULE_ID, setting } from "../shared.mjs";
 
 const D = () => CONST.TOKEN_DISPOSITIONS;
@@ -30,16 +30,24 @@ export function footprintDistance(a, b) {
   return Math.max(di, dj) - (Math.max(di, dj) > 0 ? 1 : 0);
 }
 
-/** Les deux tokens sont-ils ennemis ? Hostile contre Amical ; un Neutre ou un Secret n'est l'ennemi de personne. */
+/**
+ * Les deux tokens sont-ils ennemis ? Les factions du moteur (§181 : un bandit et un loup, tous deux Hostiles, peuvent l'être) ;
+ * sans elles, Hostile contre Amical. Un Secret n'est l'ennemi de personne.
+ */
 export function hostile(a, b) {
   const da = a.disposition, db = b.disposition;
   if ( (da === D().SECRET) || (db === D().SECRET) ) return false;
+  const relation = factionRelation(a, b);
+  if ( relation ) return relation === "hostile";
   return ((da === D().HOSTILE) && (db === D().FRIENDLY)) || ((da === D().FRIENDLY) && (db === D().HOSTILE));
 }
 
-/** Même camp : même disposition (hors Secret). */
+/** Même camp : les factions du moteur (§181), sinon même disposition (hors Secret). */
 export function allied(a, b) {
-  return (a.disposition !== D().SECRET) && (a.disposition === b.disposition);
+  if ( (a.disposition === D().SECRET) || (b.disposition === D().SECRET) ) return false;
+  const relation = factionRelation(a, b);
+  if ( relation ) return relation === "allied";
+  return a.disposition === b.disposition;
 }
 
 /** Longueur d'une case dans l'unité de la fiche, pour convertir une Vitesse en cases (jamais de distance en dur). */

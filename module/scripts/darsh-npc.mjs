@@ -156,7 +156,7 @@ Hooks.once("ready", () => {
       /** L'état de moral d'un token dans le combat en cours ; `reset` : l'effacer (scénarios). */
       moral: async ({ tokenId, reset=false }={}) => {
         const token = tokenOf(tokenId);
-        if ( reset ) await token.unsetFlag(MODULE_ID, "morale");
+        if ( reset ) { await token.unsetFlag(MODULE_ID, "morale"); await engine.setStance(token, null); }
         return { ...moraleOf(token), disposition: token.disposition };
       },
       /** Répondre à une carte de confirmation (§12.2) comme un bouton : `choice` = play | skip | manual, `target` : id de token. */

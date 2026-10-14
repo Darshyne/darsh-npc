@@ -49,10 +49,13 @@ export function engagementsOn(scene) {
   const tokens = new Map();
   const causes = [];
   const all = scene.tokens.filter(able);
+  // §181 (décision de l'utilisateur, 2026-10-14) : deux créatures du MJ hostiles entre elles ne s'engagent que si un PJ est sur la scène.
+  const playerHere = all.some(isPlayerSide);
   for ( const observer of all ) {
     if ( isPlayerSide(observer) ) continue;
     for ( const target of all ) {
       if ( (target === observer) || !hostile(observer, target) ) continue;
+      if ( !playerHere && !isPlayerSide(target) ) continue;
       if ( engine.canSee(observer, target) !== true ) continue;
       tokens.set(observer.id, observer);
       tokens.set(target.id, target);
