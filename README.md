@@ -106,7 +106,7 @@ content: `Hooks.on("darsh-npc.register", register => register("my-module", { pro
 
 ## Translations
 
-The module ships English and French. To add a language, copy `module/lang/en.json` to `module/lang/<code>.json`, translate the
+The module ships English, French and Brazilian Portuguese (pt-BR translation by Henrique, [@henriquebot](https://github.com/henriquebot)). To add a language, copy `module/lang/en.json` to `module/lang/<code>.json`, translate the
 values, and add an entry to `languages` in `module/module.json`; missing keys fall back to English.
 
 ## License

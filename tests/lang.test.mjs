@@ -19,7 +19,8 @@ function usedKeys() {
 }
 
 describe("fichiers de langue", () => {
-  for ( const lang of ["fr", "en", "pt-BR"] ) {
+  // pt-BR peut avoir du retard sur une clé neuve (Foundry montre alors l'anglais) : seuls fr et en doivent tout avoir.
+  for ( const lang of ["fr", "en"] ) {
     it(`${lang} : chaque clé demandée existe`, () => {
       const json = JSON.parse(readFileSync(join(ROOT, `lang/${lang}.json`), "utf8"));
       // Un préfixe de traduction (`LOCALIZATION_PREFIXES` d'un modèle de données) existe si au moins une clé commence par lui.
@@ -28,13 +29,16 @@ describe("fichiers de langue", () => {
     });
   }
 
-  it("en, fr et pt-BR ont les mêmes clés et les mêmes {paramètres}", () => {
+  it("fr a les clés de en ; fr et pt-BR, ses {paramètres} et rien de plus", () => {
     const en = JSON.parse(readFileSync(join(ROOT, "lang/en.json"), "utf8"));
     const params = s => (String(s).match(/\{[a-zA-Z]+\}/g) ?? []).sort();
     for ( const lang of ["fr", "pt-BR"] ) {
       const translated = JSON.parse(readFileSync(join(ROOT, `lang/${lang}.json`), "utf8"));
-      expect(Object.keys(translated).sort()).toEqual(Object.keys(en).sort());
-      for ( const k of Object.keys(en) ) {
+      // Le français suit l'anglais clé pour clé ; le portugais peut avoir du retard (une clé absente s'affiche en anglais), jamais
+      // une clé en trop, une valeur vide ni des {paramètres} différents.
+      if ( lang === "fr" ) expect(Object.keys(translated).sort()).toEqual(Object.keys(en).sort());
+      expect(Object.keys(translated).filter(k => !(k in en)), `${lang}: clés en trop`).toEqual([]);
+      for ( const k of Object.keys(translated) ) {
         expect(String(translated[k]).trim(), `${lang}: ${k}`).not.toBe("");
         expect(params(translated[k]), `${lang}: ${k}`).toEqual(params(en[k]));
       }
