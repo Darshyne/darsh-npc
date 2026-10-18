@@ -8,7 +8,7 @@
  */
 import { appearanceOf } from "../core/view.mjs";
 import { factsOf, armorWeightOf, roleOf } from "./sheet.mjs";
-import { canSee, movement, pathCost, factionRelation } from "./engine.mjs";
+import { canSee, movement, pathCost, factionRelation, gap, climbState } from "./engine.mjs";
 import { MODULE_ID, setting } from "../shared.mjs";
 
 const D = () => CONST.TOKEN_DISPOSITIONS;
@@ -100,11 +100,19 @@ export function viewOf(token, { omniscient=setting("omniscient") }={}) {
   const reachCells = Math.max(1, ...facts.attacks.filter(a => !a.ranged && a.range.reach).map(a => cellsOfSpeed(scene, a.range.reach, a.range.units)));
   const longestShot = Math.max(0, ...facts.attacks.filter(a => a.ranged).map(a => cellsOfSpeed(scene, a.range.long ?? a.range.value ?? 0, a.range.units)));
   const others = scene.tokens.filter(t => (t.id !== token.id) && t.actor && !t.hidden);
+  // §19 (escalade, moteur §196) : la distance en trois dimensions quand le moteur la publie — une cible au mur ou au plafond n'est pas
+  // « au contact » parce que sa case touche la nôtre ; `vertical` dit le seul vide vertical (en cases), `flat` la distance sur la carte.
+  const spaced = other => {
+    const flat = footprintDistance(mine, footprintOf(other));
+    const g = gap(token, other);
+    return g ? { distance: Math.max(0, Math.round(g.cells) - 1), vertical: Math.max(0, g.vertical ?? 0), flat } : { distance: flat, vertical: 0, flat };
+  };
+  const climbing = climbState(token);
   const enemies = [];
   const allies = [];
   for ( const other of others ) {
     const theirs = footprintOf(other);
-    const distance = footprintDistance(mine, theirs);
+    const { distance, vertical, flat } = spaced(other);
     if ( allied(token, other) ) { allies.push({ id: other.id, name: other.name, distance, down: isDown(other.actor) }); continue; }
     if ( !hostile(token, other) ) continue;
     const theirFacts = factsOf(other.actor);
@@ -116,6 +124,8 @@ export function viewOf(token, { omniscient=setting("omniscient") }={}) {
       id: other.id,
       name: other.name,
       distance,
+      vertical,
+      flat,
       cost,
       appearance: appearanceOf(fraction),
       hpFraction: omniscient ? fraction : null,
@@ -141,6 +151,8 @@ export function viewOf(token, { omniscient=setting("omniscient") }={}) {
   return {
     self: {
       id: token.id, name: token.name, hp: { value: facts.hp.value, max: facts.hp.max }, cells, reach: reachCells,
+      // §19 : sait grimper vite (vitesse d'escalade) ou marcher au plafond (Pattes d'araignée) ; est au mur / au plafond en ce moment.
+      climber: !!(climbing && (climbing.native || climbing.walksCeilings)), climbing: !!climbing?.climbing, onCeiling: !!climbing?.onCeiling,
       lastTarget: token.getFlag(MODULE_ID, "lastTarget") ?? null
     },
     enemies,

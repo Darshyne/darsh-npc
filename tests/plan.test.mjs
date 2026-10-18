@@ -106,3 +106,40 @@ describe("déplacement (étape 3)", () => {
     expect(planMove(view([]), profile(), [], [attack("x")])).toEqual({ type: "yield", reason: "noEnemy" });
   });
 });
+
+describe("§19 : une cible perchée (au mur, au plafond)", () => {
+  const ceiling = over => enemy("plafond", { distance: 1, vertical: 2, flat: 0, cost: 1, ...over });
+  it("le vide vertical seul dépasse l'allonge : hors d'atteinte au sol", async () => {
+    const { tooHighFor } = await import("../module/scripts/core/plan.mjs");
+    expect(tooHighFor(ceiling(), attack("x"))).toBe(true);
+    expect(tooHighFor(ceiling({ vertical: 1 }), attack("x"))).toBe(false);
+    expect(tooHighFor(ceiling(), attack("pique", { reach: 2 }))).toBe(false);
+    expect(tooHighFor(enemy("sol"), attack("x"))).toBe(false);   // sans moteur qui la publie : pas de vide vertical
+  });
+  it("au plafond, la mêlée ne l'atteint pas d'où l'on est (distance en trois dimensions)", () => {
+    expect(planAttack(view([ceiling()]), profile(), [], [attack("griffes")]).reason).toBe("outOfReach");
+  });
+  it("une créature qui grimpe vite (vitesse d'escalade, Pattes d'araignée) va la chercher", async () => {
+    const { planMove } = await import("../module/scripts/core/plan.mjs");
+    const move = planMove(view([ceiling()], { climber: true }), profile(), [], [attack("morsure")]);
+    expect(move).toMatchObject({ type: "climb", target: "plafond", reachCells: 1 });
+  });
+  it("une créature déjà au plafond ne grimpe pas de nouveau", async () => {
+    const { planMove } = await import("../module/scripts/core/plan.mjs");
+    expect(planMove(view([ceiling()], { climber: true, onCeiling: true }), profile(), [], [attack("morsure")])).toMatchObject({ type: "yield", reason: "tooHigh" });
+  });
+  it("sinon, une attaque à distance : s'approcher en la voyant", async () => {
+    const { planMove } = await import("../module/scripts/core/plan.mjs");
+    const javelin = attack("javelot", { melee: false, ranged: true, reach: 0, normal: 6, long: 24 });
+    expect(planMove(view([ceiling({ distance: 8 })]), profile(), [], [attack("lance", { damage: 6 }), javelin])).toMatchObject({ type: "move", seeing: true, reachCells: 6, attack: { name: "javelot" } });
+  });
+  it("sinon, la cible suivante qu'on peut atteindre au sol", async () => {
+    const { planMove } = await import("../module/scripts/core/plan.mjs");
+    const move = planMove(view([ceiling(), enemy("sol", { distance: 4, cost: 4 })]), profile(), [], [attack("griffes")]);
+    expect(move).toMatchObject({ type: "move", target: "sol", seeing: false });
+  });
+  it("personne d'atteignable : garder sa position et rendre la main (`tooHigh`)", async () => {
+    const { planMove } = await import("../module/scripts/core/plan.mjs");
+    expect(planMove(view([ceiling()]), profile(), [], [attack("griffes")])).toEqual({ type: "yield", reason: "tooHigh", target: "plafond" });
+  });
+});

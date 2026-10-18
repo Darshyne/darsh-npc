@@ -35,7 +35,9 @@ const MAX_MOVES = 2;
 /** Les modes du pilote. */
 export const PILOT_MODES = Object.freeze(["off", "on", "confirm"]);
 /** Raisons de fin qui laissent finir le tour tout seul (`autoEndTurn`). */
-const ENDS_TURN = ["done", "outOfReach", "noEnemy", "noAttack", "incapacitated", "ordered", "noPath", "noMovement", "fleeing", "surrendered"];
+const ENDS_TURN = ["done", "outOfReach", "noEnemy", "noAttack", "incapacitated", "ordered", "noPath", "noMovement", "fleeing", "surrendered", "tooHigh"];
+/** Raisons d'un refus de grimper qui disent « hors d'atteinte » (moteur §196). */
+const UNREACHABLE = ["noWall", "cannotClimb", "tooHigh", "refused", "notOwner"];
 
 /** Le token peut-il être piloté du tout ? Rend null, ou la raison du refus (clé de traduction). */
 export function refusal(token) {
@@ -90,7 +92,13 @@ async function moveToward(token, combatant, move) {
   const target = token.parent.tokens.get(move.target);
   if ( !target ) return { reason: "noEnemy" };
   const goal = { reachCells: move.reachCells, seeing: move.seeing };
-  const direct = engine.pathToward(token, target, goal);
+  let direct = engine.pathToward(token, target, goal);
+  // §19 : un grimpeur au mur n'a pas de chemin loin du mur (l'A* du moteur l'y garde) — il redescend d'abord, puis marche au sol.
+  const climbing = direct ? null : engine.climbState(token);
+  if ( climbing?.climbing && !climbing.onCeiling && (climbing.height > 0) && climbing.canDown ) {
+    const cells = Math.ceil((climbing.height / (token.parent.grid.distance || 5)) - 1e-6);
+    if ( await engine.climbDown(token, cells) ) direct = engine.pathToward(token, target, goal);
+  }
   if ( !direct ) return { reason: "noPath" };
   const left = engine.movement(token);
   if ( left && (left.left <= 0) && !direct.arrives ) return { reason: "noMovement" };
@@ -102,7 +110,22 @@ async function moveToward(token, combatant, move) {
   if ( !direct.moves && !dashed ) return { reason: direct.arrives ? "outOfReach" : "noMovement" };
   const walked = await engine.approachTarget(token, target, goal);
   if ( walked.reason === "unsupported" ) return { reason: "engineTooOld" };
+  // §19 : le moteur juge la cible hors d'allonge par le vide vertical (au plafond) — la vue ne le savait pas : on n'insiste pas.
+  if ( walked.reason === "tooHigh" ) return { reason: "tooHigh" };
   return { type: "move", target: target.name, dashed, arrived: !!walked.arrived, why: walked.reason ?? null, reasons: move.reasons };
+}
+
+/**
+ * §19 (escalade) : grimper jusqu'à l'allonge d'une cible perchée, par le moteur (§196 : le pied du mur à côté d'elle, puis la montée,
+ * payées au budget du tour). Rend l'étape `{ type: "climb", target, arrived, climbed }`, ou `{ reason }` si rien n'a bougé.
+ */
+async function climbToward(token, move) {
+  const target = token.parent.tokens.get(move.target);
+  if ( !target ) return { reason: "noEnemy" };
+  const result = await engine.climbToward(token, target, { reachCells: move.reachCells });
+  if ( result.reason === "unsupported" ) return { reason: "tooHigh" };
+  if ( !result.arrived && !result.climbed && UNREACHABLE.includes(result.reason) ) return { reason: "tooHigh" };
+  return { type: "climb", target: target.name, arrived: !!result.arrived, climbed: result.climbed ?? 0, why: result.reason ?? null, reasons: move.reasons };
 }
 
 /* -------------------------------------------- */
@@ -193,7 +216,7 @@ export async function playTurn(token, combatant=null, { only=null }={}) {
   const result = await fight(token, combatant, steps, { only });
   if ( combat ) {
     const attacked = result.steps.some(s => s.type === "attack");
-    await noteHarm(token, combat, { attacked, couldNotReach: ["outOfReach", "noPath", "noMovement"].includes(result.reason) });
+    await noteHarm(token, combat, { attacked, couldNotReach: ["outOfReach", "noPath", "noMovement", "tooHigh"].includes(result.reason) });
   }
   return result;
 }
@@ -217,10 +240,11 @@ async function fight(token, combatant, steps, { only=null }={}) {
     const { plan, move } = planFor(token, { allowed, only });
     if ( plan.type !== "attack" ) {
       // Personne à portée : s'approcher (une fois, une seconde après une cible tombée), puis replanifier.
-      if ( (move?.type === "move") && (moves < MAX_MOVES) && (combatant || !moves) ) {
+      if ( ["move", "climb"].includes(move?.type) && (moves < MAX_MOVES) && (combatant || !moves) ) {
         moves += 1;
-        const step = await act(() => moveToward(token, combatant, move));
-        if ( step.type !== "move" ) return { steps, reason: (attacks || moves > 1) ? "done" : step.reason };
+        const step = await act(() => (move.type === "climb") ? climbToward(token, move) : moveToward(token, combatant, move));
+        if ( (step.type === "climb") && !step.arrived ) { steps.push(step); return { steps, reason: "done" }; }
+        if ( !["move", "climb"].includes(step.type) ) return { steps, reason: (attacks || moves > 1) ? "done" : step.reason };
         steps.push(step);
         if ( step.dashed ) return { steps, reason: "done" };   // l'Action est partie dans le Sprint
         await sleep(300);
@@ -267,6 +291,9 @@ async function trace(token, { steps, reason }) {
       case "move": return loc("Pilote.Trace.Approche", {
         target: escape(s.target), how: loc(s.dashed ? "Pilote.Trace.Sprint" : "Pilote.Trace.Marche"),
         outcome: loc(s.arrived ? "Pilote.Trace.Arrive" : "Pilote.Trace.Pas"), reasons: why(s)
+      });
+      case "climb": return loc("Pilote.Trace.Grimpe", {
+        target: escape(s.target), cells: s.climbed, outcome: loc(s.arrived ? "Pilote.Trace.Arrive" : "Pilote.Trace.Pas"), reasons: why(s)
       });
       case "morale": return loc(s.success ? "Pilote.Trace.MoralTient" : "Pilote.Trace.MoralCede", {
         causes: s.causes.map(c => loc(`Moral.Cause.${c}`)).join(", "), total: s.total, dc: s.dc

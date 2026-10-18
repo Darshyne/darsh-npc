@@ -83,6 +83,12 @@ export function planAttack(view, profile, enmities, attacks, { allowed=null }={}
 }
 
 /**
+ * §19 (escalade) : la cible est-elle hors d'atteinte d'une attaque de contact par le seul vide vertical (au mur, au plafond, en vol) ?
+ * Alors aucune marche au sol n'y mène (le moteur répond `tooHigh` à l'approche). `vertical` : le vide en cases (0 sans moteur qui le dit).
+ */
+export const tooHighFor = (enemy, attack) => !!attack && ((enemy?.vertical ?? 0) > Math.max(1, attack.reach ?? 1) + 1e-9);
+
+/**
  * Étape 3 (SPEC §9.3) : où aller quand aucune cible n'est à portée. La meilleure cible du classement (§8) ; un **tireur** (profil
  * `ranged`, ou sans attaque de contact) s'en approche jusqu'à la portée normale de sa meilleure attaque à distance, **en la voyant** —
  * il garde ses distances ; sinon, au contact, jusqu'à l'allonge de sa meilleure attaque de contact. Rend
@@ -99,6 +105,21 @@ export function planMove(view, profile, enmities, attacks, { allowed=null }={}) 
   const shooter = !!ranged && ((profile.range === "ranged") || !melee);
   const attack = shooter ? ranged : melee;
   if ( !attack ) return { type: "yield", reason: "noAttack" };
-  const first = ranked[0];
-  return { type: "move", target: first.id, reachCells: shooter ? attack.normal : attack.reach, seeing: shooter, attack, reasons: first.reasons };
+  if ( shooter ) {
+    const first = ranked[0];
+    return { type: "move", target: first.id, reachCells: attack.normal, seeing: true, attack, reasons: first.reasons };
+  }
+  // §19 (escalade) : une cible perchée hors d'allonge — grimper jusqu'à elle (vitesse d'escalade, Pattes d'araignée), sinon la viser à
+  // distance s'il y a de quoi, sinon la suivante du classement ; personne d'atteignable : garder sa position (`tooHigh`).
+  const byId = new Map((view.enemies ?? []).map(e => [e.id, e]));
+  let perched = null;
+  for ( const scored of ranked ) {
+    const enemy = byId.get(scored.id);
+    if ( !enemy ) continue;
+    if ( !tooHighFor(enemy, melee) ) return { type: "move", target: enemy.id, reachCells: melee.reach, seeing: false, attack: melee, reasons: scored.reasons };
+    if ( view.self?.climber && !view.self?.onCeiling ) return { type: "climb", target: enemy.id, reachCells: melee.reach, attack: melee, reasons: scored.reasons };
+    if ( ranged ) return { type: "move", target: enemy.id, reachCells: ranged.normal, seeing: true, attack: ranged, reasons: scored.reasons };
+    perched ??= enemy.id;
+  }
+  return { type: "yield", reason: "tooHigh", target: perched };
 }

@@ -18,6 +18,9 @@ function describe(token, { plan, move, fleeing }) {
   if ( plan?.type === "attack" ) {
     return escape(loc("Confirmer.Attaque", { attack: plan.attack.name, target: token.parent.tokens.get(plan.target)?.name ?? "?" })) + why(plan.reasons);
   }
+  if ( move?.type === "climb" ) {
+    return escape(loc("Confirmer.Grimpe", { target: token.parent.tokens.get(move.target)?.name ?? "?", attack: move.attack.name })) + why(move.reasons);
+  }
   if ( move?.type === "move" ) {
     return escape(loc("Confirmer.Approche", { target: token.parent.tokens.get(move.target)?.name ?? "?", attack: move.attack.name })) + why(move.reasons);
   }

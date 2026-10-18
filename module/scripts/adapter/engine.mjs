@@ -79,6 +79,46 @@ export async function approachTarget(token, target, { reachCells=1, seeing=false
   return api.approach(token, { target, reachCells, seeing });
 }
 
+/* -------------------------------------------- */
+/*  Hauteur et escalade (moteur §196)            */
+/* -------------------------------------------- */
+
+/**
+ * L'écart de deux tokens en cases, en trois dimensions (moteur §196, `api.gap`) : `{ cells, vertical }` — `cells` 1 = au contact,
+ * `vertical` le seul vide vertical (une cible au plafond, en vol). null sans moteur qui le publie : la vue garde la carte.
+ */
+export function gap(a, b) {
+  const fn = engine()?.gap;
+  if ( typeof fn !== "function" ) return null;
+  try { return fn(a, b) ?? null; } catch { return null; }
+}
+
+/**
+ * L'escalade d'un token selon le moteur (§196, `api.climb.state`) : `{ climbing, onCeiling, native, walksCeilings, height, canClimb,
+ * canDown… }`, ou null sans moteur qui la publie.
+ */
+export function climbState(token) {
+  const fn = engine()?.climb?.state;
+  if ( typeof fn !== "function" ) return null;
+  try { return fn(token) ?? null; } catch { return null; }
+}
+
+/**
+ * Grimper jusqu'à l'allonge d'une cible perchée (§196, `api.climb.toward`) : le pied du mur à côté d'elle, puis la montée, dans le
+ * budget du tour. Rend `{ arrived, climbed, reason? }` ; `{ arrived: false, climbed: 0, reason: "unsupported" }` sans moteur qui le sait.
+ */
+export async function climbToward(token, target, { reachCells=1 }={}) {
+  const fn = engine()?.climb?.toward;
+  if ( typeof fn !== "function" ) return { arrived: false, climbed: 0, reason: "unsupported" };
+  return fn(token, target, { reachCells });
+}
+
+/** Redescendre le long du mur de `cells` cases (§196, `api.climb.down`, sans fenêtre). Rend true si le token est descendu. */
+export async function climbDown(token, cells) {
+  const fn = engine()?.climb?.down;
+  return typeof fn === "function" ? !!(await fn(token, { cells })) : false;
+}
+
 /** Prendre une action de base sans item (moteur §179 : `dash`, `disengage`, `dodge`), payée sur le budget du tour. Rend true si prise. */
 export async function takeBasic(actor, kind) {
   const take = engine()?.basics?.take;

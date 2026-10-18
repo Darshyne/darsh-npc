@@ -139,8 +139,9 @@ Hooks.once("ready", () => {
       plan: ({ tokenId }={}) => {
         const { plan, move, view } = planFor(tokenOf(tokenId));
         return { plan: plan.type === "attack" ? { ...plan, attack: { name: plan.attack.name, id: plan.attack.id, mode: plan.mode } } : plan,
-          move: move?.type === "move" ? { ...move, attack: { name: move.attack.name, id: move.attack.id } } : move,
-          enemies: view.enemies.map(e => ({ name: e.name, distance: e.distance, appearance: e.appearance })) };
+          move: ["move", "climb"].includes(move?.type) ? { ...move, attack: { name: move.attack.name, id: move.attack.id } } : move,
+          enemies: view.enemies.map(e => ({ name: e.name, distance: e.distance, vertical: e.vertical ?? 0, flat: e.flat ?? e.distance, appearance: e.appearance })),
+          self: { climber: !!view.self.climber, climbing: !!view.self.climbing, onCeiling: !!view.self.onCeiling } };
       },
       /** Le chemin du moteur vers un token, sans bouger (§179) : `{ api, direct, sprint, movement }`. */
       chemin: ({ tokenId, targetId, reachCells=1, seeing=false }={}) => {
