@@ -8,11 +8,16 @@
  * flânent un peu, regardent dans la direction `facing` au repos, et y reviennent après une alerte.
  *
  * L'affectation est un flag de **token** (`route` ou `post` = id de la région), posée depuis le HUD du token (ui/assign.mjs).
+ *
+ * Étape 7 (§10.2, §10.5) : « Drapeau (DAS) » (`kind` : Interdit, Refuge, Alarme, Poste de tir) et « Réserve (DAS) » (renforts cachés, ou
+ * créés depuis un acteur). Ils ne réagissent eux non plus à aucun évènement : l'horloge, le pilote et runtime/flags.mjs les lisent.
  */
 import { MODULE_ID } from "../shared.mjs";
 
 export const PATROL_TYPE = `${MODULE_ID}.patrol`;
 export const POST_TYPE = `${MODULE_ID}.post`;
+export const FLAG_TYPE = `${MODULE_ID}.flag`;
+export const RESERVE_TYPE = `${MODULE_ID}.reserve`;
 
 let classes = null;
 
@@ -50,16 +55,56 @@ function behaviorClasses() {
     static events = {};
   }
 
-  classes = { PatrolBehaviorType, PostBehaviorType };
+  class FlagBehaviorType extends Base {
+    static LOCALIZATION_PREFIXES = ["DNPC.Drapeau"];
+    static defineSchema() {
+      return {
+        label: new fields.StringField({ required: true, blank: true, initial: "" }),
+        kind: new fields.StringField({ required: true, initial: "forbidden",
+          choices: { forbidden: "DNPC.Drapeau.Kind.forbidden", refuge: "DNPC.Drapeau.Kind.refuge", alarm: "DNPC.Drapeau.Kind.alarm",
+            vantage: "DNPC.Drapeau.Kind.vantage" } }),
+        groups: new fields.StringField({ required: true, blank: true, initial: "" }),
+        exit: new fields.BooleanField({ initial: false }),
+        sound: new fields.FilePathField({ required: false, blank: true, categories: ["AUDIO"], initial: "" })
+      };
+    }
+    static events = {};
+  }
+
+  class ReserveBehaviorType extends Base {
+    static LOCALIZATION_PREFIXES = ["DNPC.Reserve"];
+    static defineSchema() {
+      return {
+        label: new fields.StringField({ required: true, blank: true, initial: "" }),
+        trigger: new fields.StringField({ required: true, initial: "alarm",
+          choices: { alarm: "DNPC.Reserve.Trigger.alarm", losses: "DNPC.Reserve.Trigger.losses", call: "DNPC.Reserve.Trigger.call",
+            manual: "DNPC.Reserve.Trigger.manual" } }),
+        lossesPercent: new fields.NumberField({ required: true, min: 1, max: 100, step: 1, initial: 50 }),
+        delay: new fields.NumberField({ required: true, min: 0, max: 600, step: 1, initial: 5 }),
+        groups: new fields.StringField({ required: true, blank: true, initial: "" }),
+        count: new fields.NumberField({ required: true, min: 0, max: 50, step: 1, initial: 0 }),
+        once: new fields.BooleanField({ initial: true }),
+        actor: new fields.DocumentUUIDField({ type: "Actor", required: false, nullable: true, initial: null }),
+        spawn: new fields.NumberField({ required: true, min: 0, max: 20, step: 1, initial: 0 })
+      };
+    }
+    static events = {};
+  }
+
+  classes = { PatrolBehaviorType, PostBehaviorType, FlagBehaviorType, ReserveBehaviorType };
   return classes;
 }
 
 export function registerBehaviors() {
-  const { PatrolBehaviorType, PostBehaviorType } = behaviorClasses();
+  const { PatrolBehaviorType, PostBehaviorType, FlagBehaviorType, ReserveBehaviorType } = behaviorClasses();
   CONFIG.RegionBehavior.dataModels[PATROL_TYPE] = PatrolBehaviorType;
   CONFIG.RegionBehavior.dataModels[POST_TYPE] = PostBehaviorType;
+  CONFIG.RegionBehavior.dataModels[FLAG_TYPE] = FlagBehaviorType;
+  CONFIG.RegionBehavior.dataModels[RESERVE_TYPE] = ReserveBehaviorType;
   CONFIG.RegionBehavior.typeIcons[PATROL_TYPE] = "fa-solid fa-route";
   CONFIG.RegionBehavior.typeIcons[POST_TYPE] = "fa-solid fa-shield-halved";
+  CONFIG.RegionBehavior.typeIcons[FLAG_TYPE] = "fa-solid fa-flag";
+  CONFIG.RegionBehavior.typeIcons[RESERVE_TYPE] = "fa-solid fa-people-group";
 }
 
 /** Le comportement actif d'un type sur une région, ou null. */
@@ -86,4 +131,62 @@ export function regionHas(region, point, elevation=0) {
   } catch { /* ancienne signature */ }
   const b = region?.object?.bounds;
   return !!b && b.contains(point.x, point.y);
+}
+
+/** Les drapeaux actifs d'une scène, d'une sorte : `[{ region, behavior }]`. */
+export function flagsOf(scene, kind) {
+  const out = [];
+  for ( const region of scene?.regions ?? [] ) {
+    for ( const behavior of region.behaviors ?? [] ) {
+      if ( (behavior.type === FLAG_TYPE) && !behavior.disabled && (behavior.system?.kind === kind) ) out.push({ region, behavior });
+    }
+  }
+  return out;
+}
+
+/** Les réserves actives d'une scène : `[{ region, behavior }]`. */
+export function reservesOf(scene) {
+  const out = [];
+  for ( const region of scene?.regions ?? [] ) {
+    for ( const behavior of region.behaviors ?? [] ) if ( (behavior.type === RESERVE_TYPE) && !behavior.disabled ) out.push({ region, behavior });
+  }
+  return out;
+}
+
+/** Les cases de la grille dont le centre est dans la région (au plus `max`, en lignes depuis le haut). */
+export function cellsOf(region, { elevation=0, max=400 }={}) {
+  const scene = region?.parent;
+  const b = region?.object?.bounds ?? boundsOfShapes(region);
+  if ( !scene || !b ) return [];
+  const grid = scene.grid;
+  const size = grid.size;
+  const cells = [];
+  const top = grid.getOffset({ x: b.x + 1, y: b.y + 1 });
+  const bottom = grid.getOffset({ x: b.x + b.width - 1, y: b.y + b.height - 1 });
+  for ( let i = top.i; i <= bottom.i; i++ ) {
+    for ( let j = top.j; j <= bottom.j; j++ ) {
+      const p = { x: (j + 0.5) * size, y: (i + 0.5) * size };
+      if ( regionHas(region, p, elevation) ) cells.push({ i, j, x: p.x, y: p.y });
+      if ( cells.length >= max ) return cells;
+    }
+  }
+  return cells;
+}
+
+/** Les bornes d'une région d'après ses formes (sans canevas : rectangle et polygone). */
+function boundsOfShapes(region) {
+  const xs = [], ys = [];
+  for ( const s of region?.shapes ?? [] ) {
+    if ( s.type === "rectangle" ) { xs.push(s.x, s.x + s.width); ys.push(s.y, s.y + s.height); }
+    else if ( Array.isArray(s.points) ) s.points.forEach((v, k) => (k % 2 ? ys : xs).push(v));
+  }
+  if ( !xs.length ) return null;
+  const x = Math.min(...xs), y = Math.min(...ys);
+  return { x, y, width: Math.max(...xs) - x, height: Math.max(...ys) - y };
+}
+
+/** Le centre d'une région (ses bornes). */
+export function centreOfRegion(region) {
+  const b = region?.object?.bounds ?? boundsOfShapes(region);
+  return b ? { x: b.x + (b.width / 2), y: b.y + (b.height / 2) } : null;
 }

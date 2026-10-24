@@ -80,8 +80,21 @@ noise, an ally's shout — makes it **suspicious** (a yellow « ? »): it turns,
 still starts the fight. Note: after installing or updating to this version, relaunch the world so Foundry knows the new region
 behaviors.
 
+**0.8.0 — step 7, flags and reinforcements (alpha).** Two more region behaviors. **Flag (DAS)**, of four kinds: **Forbidden** (the
+engine's paths avoid the area — for everyone, players included), **Refuge** (where fleeing creatures run to; marked as an exit, a
+creature that reaches it leaves the scene — its token is hidden, never deleted), **Alarm** (an alert creature standing in it, or
+reaching it, alerts its whole group on the scene, which converges on the enemy's last known position; optional bell sound) and
+**Vantage point** (AI shooters take position there when they can see their target from it). **Reserve (DAS)**: the AI-driven
+creatures inside are hidden and wait until the alarm, the group's losses, a fleeing creature that fetches them or the GM (« Bring them
+in » button) calls them; after a delay (seconds out of combat, rounds in combat) they appear, alert, and join the combat with their
+initiative — or the reserve creates its tokens from an actor. A token's **group** (who shares alarms) is set in its AI assignment
+window; by default, its faction. A fleeing creature that thinks ahead fetches the reinforcements or rings the alarm, and the morale
+test is made with Advantage while reinforcements are available. API: `api.ai.alert(token, { group, position })`,
+`api.ai.reinforce(region)`, hooks `darsh-npc.alert` and `darsh-npc.reinforcements`. Relaunch the world after updating (new region
+behaviors).
+
 Roadmap:
-6 Regions and real time · 7 engagement and reinforcements · 7 bis scene snapshot · 8 abilities declared by the engine's content ·
+6 Regions and real time · 7 engagement and reinforcements (done) · 7 bis scene snapshot · 8 abilities declared by the engine's content ·
 9 hatreds and registered tables · 9 bis schedules.
 
 It **requires the [`dnd5e-combat`](https://github.com/Darshyne/dnd5e-combat) engine** (≥ 0.228.0). The engine does not

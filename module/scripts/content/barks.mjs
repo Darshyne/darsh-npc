@@ -19,6 +19,10 @@ export const EMOTE_FAMILIES = Object.freeze(["beast", "mindless", "monster"]);
 
 export const BARKS = Object.freeze({
   brute: {
+    alarm: {
+      fr: ["Alerte ! Tout le monde debout !", "On est attaqués ! À moi !", "Debout là-dedans, on a de la visite !"],
+      en: ["Alarm! Everyone up!", "We're under attack! To me!", "Up, you lot, we've got company!"]
+    },
     spotted: {
       fr: ["Hé ! Là-bas !", "Des intrus !", "Je vous vois !"],
       en: ["Hey! Over there!", "Intruders!", "I see you!"]
@@ -65,6 +69,10 @@ export const BARKS = Object.freeze({
     }
   },
   cunning: {
+    alarm: {
+      fr: ["Donnez l'alerte, et vite !", "Qu'on prévienne les autres !", "Tout le monde à son poste !"],
+      en: ["Sound the alarm, now!", "Warn the others!", "Everyone to your posts!"]
+    },
     spotted: {
       fr: ["Tiens, tiens… de la visite.", "Je savais que vous viendriez.", "Encerclez-les !"],
       en: ["Well, well… visitors.", "I knew you would come.", "Surround them!"]
@@ -111,6 +119,10 @@ export const BARKS = Object.freeze({
     }
   },
   fiend: {
+    alarm: {
+      fr: ["Venez, mes frères : de la chair fraîche !", "À moi, légions !"],
+      en: ["Come, my kin: fresh meat!", "To me, legions!"]
+    },
     spotted: {
       fr: ["Des mortels… quelle aubaine.", "Je sens votre peur."],
       en: ["Mortals… how convenient.", "I can smell your fear."]
@@ -149,6 +161,10 @@ export const BARKS = Object.freeze({
     }
   },
   undead: {
+    alarm: {
+      fr: ["Levez-vous… les vivants sont là.", "Éveillez-vous, serviteurs !"],
+      en: ["Rise… the living are here.", "Awaken, servants!"]
+    },
     spotted: {
       fr: ["Des vivants… si chauds…", "Qui trouble mon repos ?"],
       en: ["The living… so warm…", "Who disturbs my rest?"]
@@ -183,6 +199,10 @@ export const BARKS = Object.freeze({
     }
   },
   dragon: {
+    alarm: {
+      fr: ["Serviteurs ! Des voleurs dans mon antre !", "À moi ! Qu'on les chasse !"],
+      en: ["Servants! Thieves in my lair!", "To me! Hunt them down!"]
+    },
     spotted: {
       fr: ["Des voleurs dans mon antre ?", "Vous osez ?"],
       en: ["Thieves in my lair?", "You dare?"]
@@ -217,6 +237,7 @@ export const BARKS = Object.freeze({
     }
   },
   beast: {
+    alarm: { fr: ["pousse un long hurlement d'appel.", "aboie à pleine gorge."], en: ["lets out a long, calling howl.", "barks at the top of its lungs."] },
     spotted: { fr: ["dresse les oreilles et gronde."], en: ["pricks up its ears and growls."] },
     engage: { fr: ["gronde en montrant les crocs.", "pousse un rugissement."], en: ["bares its teeth with a growl.", "lets out a roar."] },
     attack: { fr: ["bondit.", "se jette en avant."], en: ["pounces.", "lunges forward."] },
@@ -228,6 +249,7 @@ export const BARKS = Object.freeze({
     victory: { fr: ["renifle les corps."], en: ["sniffs at the bodies."] }
   },
   mindless: {
+    alarm: { fr: ["pousse un râle qui porte loin."], en: ["lets out a moan that carries far."] },
     spotted: { fr: ["tourne lentement la tête.", "se fige, puis avance."], en: ["slowly turns its head.", "freezes, then lurches forward."] },
     engage: { fr: ["pousse un râle.", "avance en traînant les pieds."], en: ["lets out a rattling moan.", "shambles forward."] },
     attack: { fr: ["frappe sans un bruit.", "gémit en frappant."], en: ["strikes without a sound.", "moans as it strikes."] },
@@ -237,6 +259,7 @@ export const BARKS = Object.freeze({
     victory: { fr: ["reste immobile, à attendre."], en: ["stands still, waiting."] }
   },
   monster: {
+    alarm: { fr: ["pousse un cri perçant qui résonne au loin."], en: ["lets out a piercing cry that echoes far away."] },
     spotted: { fr: ["émet un sifflement menaçant."], en: ["lets out a threatening hiss."] },
     engage: { fr: ["pousse un cri strident.", "se dresse, menaçant."], en: ["shrieks.", "rears up, menacing."] },
     attack: { fr: ["frappe avec fureur."], en: ["strikes furiously."] },

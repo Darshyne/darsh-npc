@@ -8,12 +8,12 @@
  */
 
 export const MOMENTS = Object.freeze(["spotted", "engage", "attack", "hit", "bloodied", "kill", "allyDown", "leaderDown", "flee",
-  "surrender", "victory"]);
+  "surrender", "victory", "alarm"]);
 
 /** Chance qu'un moment fasse parler, à la fréquence « normale » (§11 : `spotted` toujours, `attack` rarement). */
 export const CHANCE = Object.freeze({
   spotted: 1, engage: 0.6, attack: 0.15, hit: 0.25, bloodied: 0.8, kill: 0.7, allyDown: 0.5, leaderDown: 0.9, flee: 1, surrender: 1,
-  victory: 0.8
+  victory: 0.8, alarm: 1
 });
 
 /** Réglage de fréquence → multiplicateur de chance. `always` : à chaque fois (tests, tables bavardes). */

@@ -16,13 +16,15 @@
 import { MODULE_ID, loc, log, setting, escape } from "../shared.mjs";
 import { levelAtLeast } from "../adapter/settings.mjs";
 import * as engine from "../adapter/engine.mjs";
-import { attacksOf, viewOf } from "../adapter/view.mjs";
+import { attacksOf, viewOf, vantageCells } from "../adapter/view.mjs";
 import { factsOf } from "../adapter/sheet.mjs";
 import { profileFor } from "./profile.mjs";
 import { planAttack, planMove } from "../core/plan.mjs";
 import { checkMorale, fleeTurn, moraleOf, noteHarm } from "./morale.mjs";
 import { askConfirm, answerAll } from "./confirm.mjs";
 import { bark } from "./barks.mjs";
+import { pickVantage } from "../core/flags.mjs";
+import { behaviorCovers, onAlertStep } from "./flags.mjs";
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const isActiveGM = () => game.users.activeGM?.isSelf === true;
@@ -128,6 +130,39 @@ async function climbToward(token, move) {
   return { type: "climb", target: target.name, arrived: !!result.arrived, climbed: result.climbed ?? 0, why: result.reason ?? null, reasons: move.reasons };
 }
 
+/**
+ * Étape 7 (§10.2 `vantage`) : un tireur (profil autre que `melee`) qui va tirer, ou s'approcher pour tirer, préfère un poste de tir de
+ * son groupe d'où il voit sa cible à portée normale, s'il l'atteint ce tour. Rend `{ target, attack, cells, vantage }` ou null.
+ */
+function vantageFor(token, combatant, plan, move, profile) {
+  if ( profile?.range === "melee" ) return null;
+  let pick = null;
+  if ( (plan?.type === "attack") && (plan.mode !== "melee") ) pick = { target: plan.target, attack: plan.attack };
+  else if ( (move?.type === "move") && move.seeing ) pick = { target: move.target, attack: move.attack };
+  if ( !pick?.attack?.normal ) return null;
+  const scene = token.parent;
+  const enemies = [scene.tokens.get(pick.target)].filter(Boolean);
+  if ( !enemies.length ) return null;
+  const vantages = vantageCells(token, enemies, behavior => behaviorCovers(behavior, token));
+  if ( !vantages.length ) return null;
+  const left = combatant ? engine.movement(token) : null;
+  const maxFrom = left ? Math.floor((left.left ?? 0) / (scene.grid.distance || 5)) : Infinity;
+  const chosen = pickVantage(vantages, pick.target, pick.attack.normal, { maxFrom });
+  if ( !chosen ) return null;
+  const cells = chosen.cells.slice(0, 12);
+  if ( combatant && !engine.pathToCells(token, cells, { level: token._source.level ?? null })?.arrives ) return null;
+  return { ...pick, cells, vantage: chosen.vantage };
+}
+
+/** Gagner le poste de tir choisi. Rend l'étape `{ type: "vantage", target, label, arrived }`, ou `{ reason }`. */
+async function takeVantage(token, choice) {
+  const region = token.parent.regions.get(choice.vantage);
+  const walked = await engine.approachCells(token, choice.cells, token._source.level ?? null);
+  if ( walked.reason === "unsupported" ) return { reason: "engineTooOld" };
+  const label = region?.behaviors?.find(b => b.system?.kind === "vantage")?.system?.label || region?.name || "—";
+  return { type: "vantage", target: token.parent.tokens.get(choice.target)?.name ?? "—", label, arrived: !!walked.arrived };
+}
+
 /* -------------------------------------------- */
 /*  Reprise de main (§12.3), arrêt d'urgence     */
 /* -------------------------------------------- */
@@ -201,6 +236,8 @@ export async function playTurn(token, combatant=null, { only=null }={}) {
   if ( engine.turnStopped(token) ) return { steps, reason: "ordered" };
   if ( engine.targetingPending() ) return { steps, reason: "targeting" };
   const combat = combatant?.combat ?? null;
+  // Étape 7 (§10.2) : une créature dans le drapeau Alarme de son groupe la donne, combat commencé ou non.
+  if ( combat ) onAlertStep(token, null);
   if ( combat ) {
     // Le moral d'abord (§9.5) : une créature rendue ne joue plus ; un fuyard fuit, sauf s'il se calme ou, acculé, se défend.
     if ( moraleOf(token, combat).state === "surrendered" ) return { steps, reason: "surrendered" };
@@ -227,6 +264,7 @@ async function fight(token, combatant, steps, { only=null }={}) {
   let first = true;
   let moves = 0;
   let attacks = 0;
+  let vantaged = false;
   while ( attacks < MAX_ATTACKS ) {
     if ( game.paused ) return { steps, reason: "paused" };
     if ( !setting("aiEnabled") ) return { steps, reason: "halted" };
@@ -237,7 +275,17 @@ async function fight(token, combatant, steps, { only=null }={}) {
     // Le moteur publie ce qui reste des Attaques multiples par une écriture du MJ : une seconde lecture avant de conclure.
     if ( allowed && !allowed.size ) { await sleep(600); allowed = allowedNow(token, combatant); }
     if ( allowed && !allowed.size ) break;
-    const { plan, move } = planFor(token, { allowed, only });
+    const { plan, move, profile } = planFor(token, { allowed, only });
+    // Étape 7 : d'abord gagner un poste de tir, avant le premier tir ou au lieu de « rester à portée ».
+    if ( !vantaged && !attacks && !moves ) {
+      vantaged = true;
+      const choice = vantageFor(token, combatant, plan, move, profile);
+      if ( choice ) {
+        moves += 1;
+        const step = await act(() => takeVantage(token, choice));
+        if ( step.type === "vantage" ) { steps.push(step); await sleep(300); continue; }
+      }
+    }
     if ( plan.type !== "attack" ) {
       // Personne à portée : s'approcher (une fois, une seconde après une cible tombée), puis replanifier.
       if ( ["move", "climb"].includes(move?.type) && (moves < MAX_MOVES) && (combatant || !moves) ) {
@@ -298,8 +346,15 @@ async function trace(token, { steps, reason }) {
       case "morale": return loc(s.success ? "Pilote.Trace.MoralTient" : "Pilote.Trace.MoralCede", {
         causes: s.causes.map(c => loc(`Moral.Cause.${c}`)).join(", "), total: s.total, dc: s.dc
       });
-      case "flee": return loc("Pilote.Trace.Fuite", {
+      case "flee": if ( s.goal ) return loc("Pilote.Trace.FuiteVers", {
+        from: escape(s.from), how: s.action ? loc(`Pilote.Trace.Base.${s.action}`) : "—", to: escape(s.to), goal: loc(`Pilote.Trace.But.${s.goal}`),
+        outcome: s.event ? loc(`Pilote.Trace.Evenement.${s.event}`) : loc(s.arrived ? "Pilote.Trace.Arrive" : "Pilote.Trace.Pas")
+      });
+      return loc("Pilote.Trace.Fuite", {
         from: escape(s.from), how: s.action ? loc(`Pilote.Trace.Base.${s.action}`) : "—", gapFrom: s.gapFrom ?? "?", gapTo: s.gapTo ?? "?"
+      });
+      case "vantage": return loc("Pilote.Trace.Poste", {
+        label: escape(s.label), target: escape(s.target), outcome: loc(s.arrived ? "Pilote.Trace.Arrive" : "Pilote.Trace.Pas")
       });
       case "surrender": return loc("Pilote.Trace.Reddition", { items: s.dropped?.length ? escape(s.dropped.join(", ")) : "—" });
       default: return loc("Pilote.Trace.Attaque", { attack: escape(s.attack), target: escape(s.target), outcome: escape(s.outcome), reasons: why(s) });

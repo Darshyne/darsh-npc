@@ -29,13 +29,16 @@ export const SEARCH_TICKS = 30;
  * @param {boolean} [input.arrived]                 arrivée au but de la marche (ou marche impossible)
  * @param {boolean} [input.atHome]                  à son poste, sur sa patrouille ou à son point de départ
  * @param {boolean} [input.walking]                 une marche est en cours
+ * @param {{x:number,y:number}|null} [input.alarmed] l'alarme du groupe (§10.2, étape 7) : la dernière position connue de l'ennemi
  */
-export function step(current={}, { seen=null, heard=null, arrived=false, atHome=true, walking=false }={}) {
+export function step(current={}, { seen=null, heard=null, arrived=false, atHome=true, walking=false, alarmed=null }={}) {
   const state = STATES.includes(current.state) ? current.state : "idle";
   const ticks = (current.ticks ?? 0) + 1;
   const goal = current.goal ?? null;
   // Un ennemi vu l'emporte sur tout : alerte, les yeux sur lui.
   if ( seen ) return { state: "alert", goal: { x: seen.x, y: seen.y }, ticks: (state === "alert") ? ticks : 0, action: "face" };
+  // L'alarme du groupe : en alerte, en route vers la dernière position connue (au pas suivant, sans rien voir, il y cherche).
+  if ( alarmed ) return { state: "alert", goal: { x: alarmed.x, y: alarmed.y }, ticks: 0, action: "walk" };
   switch ( state ) {
     case "alert":
       // Perdu de vue : aller voir où il était.

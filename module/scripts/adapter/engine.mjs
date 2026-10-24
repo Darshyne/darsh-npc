@@ -274,3 +274,35 @@ export function isHidden(token) {
   const api = engine();
   return typeof api?.sneak?.is === "function" ? !!api.sneak.is(token) : false;
 }
+
+/* -------------------------------------------- */
+/*  Drapeaux et renforts (étape 7, SPEC §10.2)   */
+/* -------------------------------------------- */
+
+/**
+ * Une région que le chemin du moteur contourne (son §103 : `flags["dnd5e-combat"].avoid`, +20 dans l'A*, pour tout le monde — les
+ * joueurs aussi). Le drapeau « Interdit » la pose ; ce module ne retire que ce qu'il a posé (un piège repéré de darsh-loot pose le même).
+ */
+export const avoids = region => region?.getFlag?.(ENGINE_ID, "avoid") === true;
+export function setAvoid(region, avoid) {
+  if ( avoids(region) === avoid ) return null;
+  return avoid ? region.setFlag(ENGINE_ID, "avoid", true) : region.unsetFlag(ENGINE_ID, "avoid");
+}
+
+/**
+ * Un chemin vers des cases, sans le parcourir (§179 : `api.path(token, { cells, level }, { maxCost, extra })`) : `{ arrives, moves,
+ * door }`, ou null. `maxCost: Infinity` : « y a-t-il un chemin du tout ? » ; sans lui, le plafond du tour.
+ */
+export function pathToCells(token, cells, { level=null, maxCost=null, extra=0 }={}) {
+  const api = engine();
+  if ( (typeof api?.path !== "function") || !cells?.length ) return null;
+  return api.path(token, { cells: cells.map(({ i, j }) => ({ i, j })), ...(level ? { level } : {}) },
+    { ...(maxCost !== null ? { maxCost } : {}), extra }) ?? null;
+}
+
+/** La faction d'un token selon le moteur (§181 `api.factions.of`), ou null. Le groupe par défaut d'une alerte (SPEC §4 « Groupe »). */
+export function factionOf(token) {
+  const fn = engine()?.factions?.of;
+  if ( typeof fn !== "function" ) return null;
+  try { return fn(token) ?? null; } catch { return null; }
+}

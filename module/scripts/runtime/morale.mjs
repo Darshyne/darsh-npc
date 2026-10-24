@@ -15,6 +15,8 @@ import { profileFor } from "./profile.mjs";
 import { bark } from "./barks.mjs";
 import { atLeast } from "../core/profile.mjs";
 import { moraleTest, moraleTriggers, canSurrender, fleeAction, CALM_TURNS } from "../core/morale.mjs";
+import { fleeGoal } from "../core/flags.mjs";
+import { fleeOptions, onArrive, reinforcementsAvailable } from "./flags.mjs";
 
 const isActiveGM = () => game.users.activeGM?.isSelf === true;
 const isDown = actor => (actor?.system?.attributes?.hp?.value ?? 0) <= 0;
@@ -59,8 +61,11 @@ export async function checkMorale(token, combat, profile) {
   const facts = factsOf(token.actor);
   const causes = moraleTriggers({ hp: facts.hp, cr: facts.cr, group: groupOf(token, combat), idle: state.idle, tested: state.tested });
   if ( !causes.length ) return null;
-  const flavor = loc("Moral.Titre", { name: token.name, causes: causes.map(c => loc(`Moral.Cause.${c}`)).join(", ") });
-  const result = await engine.save(token.actor, { ...test, flavor });
+  // §10.5 : on tient mieux quand on sait que la relève arrive — une réserve non vidée qui couvre son groupe donne l'Avantage.
+  const backed = reinforcementsAvailable(token);
+  const flavor = loc("Moral.Titre", { name: token.name, causes: causes.map(c => loc(`Moral.Cause.${c}`)).join(", ") })
+    + (backed ? ` (${loc("Moral.Renforts")})` : "");
+  const result = await engine.save(token.actor, { ...test, advantage: test.advantage || backed, flavor });
   if ( !result ) return null;
   const tested = [...new Set([...state.tested, ...causes])];
   if ( result.success ) await setMorale(token, { tested }, combat);
@@ -105,6 +110,23 @@ export async function fleeTurn(token, combatant, profile, view) {
   const actionFree = !!(combatant && engine.budget(combatant)?.action);
   const speed = engine.movement(token)?.speed ?? 0;
   const kind = fleeAction(profile, threatened, atLeast);
+  // Étape 7 (§9.5, §10.5) : chercher les renforts (`cunning`+), donner l'alarme (`average`+), sinon gagner un refuge — d'abord un refuge
+  // hors de vue. Rien d'atteignable : s'éloigner de l'ennemi le plus proche, comme avant.
+  const options = fleeOptions(token, enemies.map(e => token.parent.tokens.get(e.id)).filter(Boolean));
+  const goal = fleeGoal(profile, { reserve: !!options.reserve, alarm: !!options.alarm, refuge: !!options.refuge });
+  if ( goal ) {
+    const dest = options[goal];
+    const took = actionFree ? await engine.takeBasic(token.actor, kind) : false;
+    const walked = await engine.approachCells(token, dest.cells, token._source.level ?? null);
+    if ( walked.reason !== "unsupported" ) {
+      const event = await onArrive(token);
+      return {
+        steps: [{ type: "flee", from: anchor.name, action: took ? kind : null, goal, to: dest.behavior.system?.label || dest.region.name,
+          arrived: !!walked.arrived, event }],
+        reason: "fleeing"
+      };
+    }
+  }
   const probe = await engine.flee(token, anchor, { dryRun: true, extra: (actionFree && (kind === "dash")) ? speed : 0 });
   if ( probe.reason === "unsupported" ) return { steps: [], reason: "engineTooOld" };
   if ( !probe.possible ) {

@@ -12,13 +12,14 @@
 import { MODULE_ID, log, setting } from "../shared.mjs";
 import { levelAtLeast } from "../adapter/settings.mjs";
 import * as engine from "../adapter/engine.mjs";
-import { allied, hostile, footprintOf, footprintDistance } from "../adapter/view.mjs";
+import { hostile, footprintOf, footprintDistance } from "../adapter/view.mjs";
 import { PATROL_TYPE, POST_TYPE, behaviorOf, regionHas } from "../adapter/behaviors.mjs";
 import { step, facingToward, routePoints, nextWaypoint, nearestWaypoint, nextGlance, SCANS } from "../core/alert.mjs";
 import { profileFor } from "./profile.mjs";
 import { pilotOf, refusal } from "./pilot.mjs";
 import { bark } from "./barks.mjs";
 import { check as checkEngagement } from "./engage.mjs";
+import { noteSeen, onAlertStep, sameGroup } from "./flags.mjs";
 
 const TICK_MS = 1000;
 /** Les alliés à moins de tant de cases entendent un camarade qui donne l'alerte. */
@@ -26,11 +27,11 @@ const ALERT_RADIUS = 8;
 const OUT = ["dead", "unconscious", "incapacitated", "paralyzed", "petrified", "stunned"];
 const isActiveGM = () => game.users.activeGM?.isSelf === true;
 
-/** Mémoire par token : `{ state, goal, ticks, walking, purpose, arrived, heard, home, route, waitUntil }`. */
+/** Mémoire par token : `{ state, goal, ticks, walking, purpose, arrived, heard, alarmed, alarmAt, home, route, waitUntil }`. */
 const memory = new Map();
 const memOf = token => {
   if ( !memory.has(token.id) ) memory.set(token.id, { state: "idle", goal: null, ticks: 0, walking: false, purpose: null, arrived: false,
-    heard: null, home: null, route: null, waitUntil: 0 });
+    heard: null, alarmed: null, alarmAt: 0, home: null, route: null, waitUntil: 0 });
   return memory.get(token.id);
 };
 
@@ -255,15 +256,20 @@ async function tickToken(token, all, now) {
   const routine = routineOf(token);
   const seen = seenEnemy(token, all);
   const purposeWasSearch = mem.purpose === "search";
-  const input = { seen, heard: mem.heard, arrived: mem.arrived && purposeWasSearch, atHome: atHome(token, routine, mem), walking: mem.walking };
+  // L'alarme du groupe (étape 7, runtime/flags.mjs), à son heure : chacun réagit avec un petit délai.
+  const alarmed = (mem.alarmed && (now >= (mem.alarmAt ?? 0))) ? mem.alarmed : null;
+  if ( alarmed ) mem.alarmed = null;
+  const input = { seen, heard: mem.heard, arrived: mem.arrived && purposeWasSearch, atHome: atHome(token, routine, mem), walking: mem.walking,
+    alarmed };
   mem.heard = null;
+  if ( seen ) noteSeen(token, seen);
   if ( purposeWasSearch && mem.arrived ) mem.arrived = false;
   const before = mem.state;
   const next = step(mem, input);
   Object.assign(mem, { state: next.state, goal: next.goal, ticks: next.ticks });
   if ( next.state !== before ) {
     await setState(token, next.state);
-    if ( next.state === "alert" ) onAlert(token, all, next.goal);
+    if ( (next.state === "alert") && seen ) onAlert(token, all, next.goal);
     if ( (next.state === "idle") && (routine?.kind === "route") ) mem.route = null;
   }
   switch ( next.action ) {
@@ -272,6 +278,8 @@ async function tickToken(token, all, now) {
     case "home": goHome(token, routine, mem); break;
     case "routine": await doRoutine(token, routine, mem, now); break;
   }
+  // Dans le drapeau Alarme de son groupe, une créature en alerte la donne (§10.2).
+  if ( ["alert", "searching"].includes(next.state) ) onAlertStep(token, next.goal);
   if ( next.state === "idle" ) await lookAround(token, routine, mem, now, input.atHome);
   else { mem.glance = null; mem.base = null; }
 }
@@ -297,13 +305,13 @@ async function lookAround(token, routine, mem, now, atHome) {
   if ( diff > 5 ) await token.update({ rotation: r.rotation }).catch(() => {});
 }
 
-/** Passé en alerte : réplique, les alliés proches entendent, et l'engagement juge la scène. */
+/** Passé en alerte : réplique, les alliés proches **du même groupe** entendent (§4, étape 7), et l'engagement juge la scène. */
 function onAlert(token, all, point) {
   bark(token, "spotted").catch(() => null);
   const me = centreOf(token);
   const radius = ALERT_RADIUS * token.parent.grid.size;
   for ( const other of all ) {
-    if ( (other === token) || !able(other) || !allied(token, other) || !driven(other) ) continue;
+    if ( (other === token) || !able(other) || !sameGroup(token, other) || !driven(other) ) continue;
     const at = centreOf(other);
     if ( Math.hypot(at.x - me.x, at.y - me.y) <= radius ) memOf(other).heard = point ? { ...point } : { ...me };
   }
@@ -336,8 +344,26 @@ export function alertOf(token) {
     route: mem?.route ? { index: mem.route.index, points: mem.route.points.length } : null };
 }
 
+/** La mémoire brute d'un token (diagnostic des scénarios), sérialisable. */
+export function memoryOf(token) {
+  const mem = memory.get(token.id);
+  if ( !mem ) return null;
+  const { glance, route, ...rest } = mem;
+  return { ...rest, now: Date.now(), able: able(token), driven: driven(token), fighting: fighting(token) };
+}
+
 export function hear(token, point) {
   memOf(token).heard = { ...point };
+}
+
+/**
+ * L'alarme du groupe pour ce token (étape 7) : en alerte, il marche vers `point` (la dernière position connue), dans `delayMs` (une
+ * marche de routine en cours finit d'abord).
+ */
+export function alarm(token, point, delayMs=0) {
+  const mem = memOf(token);
+  mem.alarmed = { x: point.x, y: point.y };
+  mem.alarmAt = Date.now() + Math.max(0, delayMs);
 }
 
 /** Oublier un token (remise à zéro : scénarios, changement d'affectation). */

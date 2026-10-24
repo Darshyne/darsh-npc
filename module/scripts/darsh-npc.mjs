@@ -21,8 +21,11 @@ import { registerMarkers, glyphOf } from "./ui/markers.mjs";
 import { registerBarks, bark, lineFor } from "./runtime/barks.mjs";
 import { registerBarksEditor } from "./ui/barks-editor.mjs";
 import { registerBehaviors } from "./adapter/behaviors.mjs";
-import { registerClock, alertOf, hear, forget, tick as clockTick } from "./runtime/clock.mjs";
+import { registerClock, alertOf, hear, forget, memoryOf, tick as clockTick } from "./runtime/clock.mjs";
 import { registerAssign, assign } from "./ui/assign.mjs";
+import { registerFlags, raiseAlarm, resetAlarms, callReserve, resetReserve, reserveState, groupOf, onArrive } from "./runtime/flags.mjs";
+import { registerReserveUI } from "./ui/reserve.mjs";
+import { RESERVE_TYPE } from "./adapter/behaviors.mjs";
 
 /** Le token d'une scène affichée par son id, ou l'erreur qui dit pourquoi. */
 function tokenOf(tokenId) {
@@ -30,6 +33,15 @@ function tokenOf(tokenId) {
   if ( !token ) throw new Error(`token ${tokenId} introuvable sur la scène affichée`);
   if ( !token.actor ) throw new Error(`token ${tokenId} sans acteur`);
   return token;
+}
+
+/** Le comportement Réserve d'une région (document, ou id sur la scène affichée), ou celui donné. */
+function reserveBehavior(region) {
+  if ( region?.documentName === "RegionBehavior" ) return region;
+  const doc = (typeof region === "string") ? canvas.scene?.regions.get(region) : region;
+  const behavior = doc?.behaviors?.find(b => b.type === RESERVE_TYPE);
+  if ( !behavior ) throw new Error(`no reserve behavior on region ${doc?.id ?? region}`);
+  return behavior;
 }
 
 /** Les cibles classées d'un token, avec sa vue et son profil. */
@@ -50,7 +62,9 @@ Hooks.once("init", () => {
   registerBarksEditor();
   registerBehaviors();
   registerClock();
+  registerFlags();
   registerAssign();
+  registerReserveUI();
 });
 
 Hooks.once("setup", () => {
@@ -86,8 +100,18 @@ Hooks.once("ready", () => {
       bark: (token, moment, { force=true }={}) => bark(token, moment, { force }),
       /** L'état d'alerte hors combat d'un token (§4 : idle, suspicious, alert, searching, confused). */
       alertState: token => alertOf(token),
-      /** Donner un doute à un token mené par l'IA (« un bruit là ») : il se tourne, puis va voir. */
-      alert: (token, point) => hear(token, point),
+      /**
+       * Donner l'alerte (§14.1). `alert(token, { x, y })` : un doute (« un bruit là ») — il se tourne, puis va voir.
+       * `alert(token, { group, position })` : l'alarme du groupe (« la cloche sonne ») — tout le groupe du token (ou `group`) sur sa scène
+       * passe en alerte vers `position` (sinon la dernière position connue), et les réserves qui attendent l'alarme partent.
+       */
+      alert: (token, arg={}) => (Number.isFinite(arg?.x) && Number.isFinite(arg?.y) && !arg.position && !arg.group)
+        ? hear(token, arg)
+        : raiseAlarm(token.parent, token, arg?.position ?? null, { group: arg?.group ?? null, cause: "api", force: true }),
+      /** Faire venir une réserve (id de région ou comportement) : après son délai, ou tout de suite (`now`). */
+      reinforce: (region, { now=false }={}) => callReserve(reserveBehavior(region), { now }),
+      /** Le groupe d'un token pour les alertes (§4) : flag `group`, sinon faction du moteur, sinon disposition. */
+      group: token => groupOf(token),
       /** Affecter un token à une patrouille ou un poste (id de région), ou le retirer (null). */
       assign: (token, regionId) => assign(token, regionId),
       /** Engagement automatique (§10.3) : juger la scène affichée maintenant (mettre en combat qui voit un ennemi). */
@@ -155,9 +179,11 @@ Hooks.once("ready", () => {
         };
       },
       /** L'état de moral d'un token dans le combat en cours ; `reset` : l'effacer (scénarios). */
-      moral: async ({ tokenId, reset=false }={}) => {
+      moral: async ({ tokenId, reset=false, state }={}) => {
         const token = tokenOf(tokenId);
         if ( reset ) { await token.unsetFlag(MODULE_ID, "morale"); await engine.setStance(token, null); }
+        // `state: "fleeing"` : un fuyard tout fait (scénarios de l'étape 7, sans rejouer le test jusqu'à l'échec).
+        if ( state !== undefined ) await setMorale(token, { state, calm: 0 });
         return { ...moraleOf(token), disposition: token.disposition };
       },
       /** Répondre à une carte de confirmation (§12.2) comme un bouton : `choice` = play | skip | manual, `target` : id de token. */
@@ -180,10 +206,39 @@ Hooks.once("ready", () => {
       alerte: async ({ tokenId, reset=false }={}) => {
         const token = tokenOf(tokenId);
         if ( reset ) await forget(token);
-        return { ...alertOf(token), flag: token.getFlag(MODULE_ID, "alert") ?? null };
+        return { ...alertOf(token), flag: token.getFlag(MODULE_ID, "alert") ?? null, memory: memoryOf(token) };
       },
       /** Le marqueur affiché au-dessus du token (texte), ou null. */
       marqueur: ({ tokenId }={}) => ({ glyph: glyphOf(tokenOf(tokenId).object)?.text ?? null }),
+      /** L'alarme du groupe de ce token (étape 7), vers `x`, `y` (sinon la dernière position connue). */
+      alarme: async ({ tokenId, x, y, group=null, reset=false }={}) => {
+        // `reset` : oublier les alarmes récentes de la scène (une alarme ne resonne pas avant une minute) et les positions connues.
+        if ( reset ) { resetAlarms(canvas.scene); if ( !tokenId ) return { reset: true }; }
+        const token = tokenOf(tokenId);
+        const position = Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null;
+        return raiseAlarm(canvas.scene, token, position, { group, cause: "api", force: true });
+      },
+      /** Le groupe d'un token ; `group` : le poser (flag de token), `null` : le retirer. */
+      groupe: async ({ tokenId, group }={}) => {
+        const token = tokenOf(tokenId);
+        if ( group === null ) await token.unsetFlag(MODULE_ID, "group");
+        else if ( group !== undefined ) await token.setFlag(MODULE_ID, "group", String(group));
+        return { group: groupOf(token) };
+      },
+      /** Une réserve (`regionId`) : `action` = etat | appeler | remettre ; `now` : sans délai. */
+      reserve: async ({ regionId, action="etat", now=false }={}) => {
+        const behavior = reserveBehavior(regionId);
+        if ( action === "appeler" ) return { scheduled: callReserve(behavior, { now }), ...reserveState(behavior) };
+        if ( action === "remettre" ) await resetReserve(behavior);
+        return reserveState(behavior);
+      },
+      /** Ce qui arrive à ce token là où il est (refuge-sortie, réserve appelée, alarme) : `{ event }`. */
+      arrivee: async ({ tokenId }={}) => ({ event: await onArrive(tokenOf(tokenId)) }),
+      /** Les drapeaux de la scène affichée et le `avoid` du moteur sur leurs régions. */
+      drapeaux: () => canvas.scene.regions.filter(r => r.behaviors.some(b => b.type.startsWith(`${MODULE_ID}.`))).map(r => ({
+        id: r.id, name: r.name, behaviors: r.behaviors.map(b => ({ type: b.type, kind: b.system?.kind ?? null, disabled: b.disabled })),
+        avoid: r.getFlag("dnd5e-combat", "avoid") === true
+      })),
       /** Un doute pour ce token (un bruit en `x`, `y`). */
       doute: ({ tokenId, x, y }={}) => { hear(tokenOf(tokenId), { x, y }); return { heard: { x, y } }; },
       /** Mettre le jeu en pause ou l'en sortir (scénarios du temps réel). */

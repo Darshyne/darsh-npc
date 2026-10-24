@@ -10,6 +10,7 @@ import { appearanceOf } from "../core/view.mjs";
 import { factsOf, armorWeightOf, roleOf } from "./sheet.mjs";
 import { canSee, movement, pathCost, factionRelation, gap, climbState } from "./engine.mjs";
 import { MODULE_ID, setting } from "../shared.mjs";
+import { flagsOf, cellsOf } from "./behaviors.mjs";
 
 const D = () => CONST.TOKEN_DISPOSITIONS;
 
@@ -165,4 +166,44 @@ export function viewOf(token, { omniscient=setting("omniscient") }={}) {
       inCombat: !!moving
     }
   };
+}
+
+/**
+ * Une ligne de vue entre deux points, murs compris (le cœur V14 : `polygonBackends.sight.testCollision`, mode `any`). Sert à juger une
+ * case **hypothétique** (poste de tir, refuge hors de vue), là où la vision du moteur ne juge que des tokens posés. Lumière et sens ne
+ * comptent pas : c'est « un mur entre les deux ? ». Sans canevas : vrai.
+ */
+export function lineOfSight(a, b) {
+  try {
+    const backend = CONFIG.Canvas.polygonBackends?.sight;
+    if ( typeof backend?.testCollision !== "function" ) return true;
+    return !backend.testCollision({ x: a.x, y: a.y }, { x: b.x, y: b.y }, { type: "sight", mode: "any" });
+  } catch { return true; }
+}
+
+/** Le centre d'un token à sa position de jeu (`_source`). */
+export function centreOf(token) {
+  const size = token.parent.grid.size;
+  return { x: token._source.x + ((token.width * size) / 2), y: token._source.y + ((token.height * size) / 2) };
+}
+
+/**
+ * Les postes de tir de la scène vus par ce token (étape 7, §10.2 `vantage`) : `[{ id, cells: [{ i, j, from, seen }] }]` — `from` : sa
+ * distance à la case (Chebyshev, cases ; 0 = il y est) ; `seen[id]` : la distance de la case à cet ennemi, s'il s'y voit (aucun mur entre
+ * eux). `accept(behavior)` : le drapeau couvre-t-il ce token (ses groupes) ?
+ */
+export function vantageCells(token, enemies, accept=() => true) {
+  const own = footprintOf(token);
+  const out = [];
+  for ( const { region, behavior } of flagsOf(token.parent, "vantage") ) {
+    if ( !accept(behavior) ) continue;
+    const cells = cellsOf(region, { elevation: token._source.elevation ?? 0, max: 150 }).map(c => {
+      const fp = { i0: c.i, j0: c.j, i1: c.i, j1: c.j };
+      const seen = {};
+      for ( const e of enemies ) if ( lineOfSight({ x: c.x, y: c.y }, centreOf(e)) ) seen[e.id] = footprintDistance(fp, footprintOf(e));
+      return { i: c.i, j: c.j, from: Math.max(Math.abs(c.i - own.i0), Math.abs(c.j - own.j0)), seen };
+    });
+    out.push({ id: region.id, cells });
+  }
+  return out;
 }
