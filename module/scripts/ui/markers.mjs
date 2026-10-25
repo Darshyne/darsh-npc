@@ -7,6 +7,7 @@
  *   œil             recherche : va voir la dernière position connue         — vu de tous
  *   « ? » gris      confusion : n'a rien trouvé, va rentrer                  — vu de tous
  *   drapeau blanc   s'est rendu (§9.5)                                       — vu de tous
+ *   💤              endormi (horaires, §10.6)                                — vu de tous
  *   souffle         fuit (§9.5)                                              — MJ seulement
  */
 import { MODULE_ID, setting } from "../shared.mjs";
@@ -21,6 +22,7 @@ const GLYPHS = {
   searching: { text: "👁", fill: "#ffffff", weight: "400" },
   confused: { text: "?", fill: "#c8c8c8", weight: "900" },
   surrendered: { text: "🏳️", fill: "#ffffff", weight: "400" },
+  asleep: { text: "💤", fill: "#ffffff", weight: "400" },
   fleeing: { text: "💨", fill: "#ffffff", weight: "400", gm: true }
 };
 
@@ -36,6 +38,8 @@ export function glyphOf(token) {
     .some(s => actor.statuses?.has(s)) ) return null;
   const morale = doc.getFlag(MODULE_ID, "morale")?.state ?? null;
   if ( morale && GLYPHS[morale] ) return GLYPHS[morale].gm && !game.user.isGM ? null : GLYPHS[morale];
+  // Endormi (horaires, §10.6) : vu de tous — on voit qu'une créature dort.
+  if ( doc.getFlag(MODULE_ID, "asleep") && !doc.inCombat ) return GLYPHS.asleep;
   const alert = doc.getFlag(MODULE_ID, "alert");
   const state = alert?.state;
   if ( !state || (state === "idle") || !GLYPHS[state] ) return null;
@@ -74,7 +78,7 @@ export function registerMarkers() {
   Hooks.on("updateToken", (doc, changes) => {
     const flags = changes.flags?.[MODULE_ID];
     if ( !flags ) return;
-    if ( ["morale", "-=morale", "alert", "-=alert"].some(k => k in flags) ) {
+    if ( ["morale", "-=morale", "alert", "-=alert", "asleep", "-=asleep"].some(k => k in flags) ) {
       draw(doc.object);
       // Le « ! » d'un combat qui commence s'efface de lui-même.
       if ( flags.alert?.state === "alert" ) setTimeout(() => draw(doc.object), ALERT_FLASH_MS + 100);

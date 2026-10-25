@@ -20,6 +20,7 @@ import { pilotOf, refusal } from "./pilot.mjs";
 import { bark } from "./barks.mjs";
 import { check as checkEngagement } from "./engage.mjs";
 import { noteSeen, onAlertStep, sameGroup } from "./flags.mjs";
+import { slotOf, scheduled, sleepStep, placeOf, hide, asleep } from "./schedule.mjs";
 
 const TICK_MS = 1000;
 /** Les alliés à moins de tant de cases entendent un camarade qui donne l'alerte. */
@@ -29,7 +30,7 @@ const isActiveGM = () => game.users.activeGM?.isSelf === true;
 
 /** Mémoire par token : `{ state, goal, ticks, walking, purpose, arrived, heard, alarmed, alarmAt, home, route, waitUntil }`. */
 const memory = new Map();
-const memOf = token => {
+export const memOf = token => {
   if ( !memory.has(token.id) ) memory.set(token.id, { state: "idle", goal: null, ticks: 0, walking: false, purpose: null, arrived: false,
     heard: null, alarmed: null, alarmAt: 0, home: null, route: null, waitUntil: 0 });
   return memory.get(token.id);
@@ -51,7 +52,7 @@ function able(token) {
 /** Le token est-il mené par l'IA hors combat ? */
 export function driven(token) {
   if ( refusal(token) ) return false;
-  return !!(token.getFlag(MODULE_ID, "route") || token.getFlag(MODULE_ID, "post")) || (pilotOf(token) !== "off");
+  return !!(token.getFlag(MODULE_ID, "route") || token.getFlag(MODULE_ID, "post")) || (pilotOf(token) !== "off") || scheduled(token);
 }
 
 /** Le monde fait-il tourner le temps réel ? */
@@ -86,6 +87,7 @@ function seenEnemy(token, all) {
  * voisines : le moteur prend la plus proche.
  */
 function walkTo(token, point, purpose) {
+  // `point.level` : un lieu sur un autre niveau V14 (un dortoir à l'étage, étape 9 bis) ; sinon celui du token.
   const mem = memOf(token);
   if ( mem.walking || !point ) return;
   const grid = token.parent.grid;
@@ -108,7 +110,7 @@ function walkTo(token, point, purpose) {
   mem.walking = true;
   mem.purpose = purpose;
   mem.dest = cells.map(cell => `${cell.i}.${cell.j}`);
-  engine.approachCells(token, cells, token._source.level ?? null)
+  engine.approachCells(token, cells, point.level ?? token._source.level ?? null)
     .catch(err => { log.warn(`${token.name}: walk failed`, err); return { arrived: false }; })
     .then(result => {
       mem.walking = false;
@@ -160,9 +162,27 @@ async function face(token, point) {
   if ( diff > 15 ) await token.update({ rotation }).catch(() => {});
 }
 
-/** La routine de ce token : sa patrouille, son poste, ou rien. */
+/**
+ * La routine de ce token : sa patrouille, son poste, ou rien. Avec un horaire (§10.6, runtime/schedule.mjs), celle du créneau en cours :
+ * `route`, `post` (un poste, ou « vaquer » dans une région), `sleep` (le dortoir), `off` (partir : il y marche, puis il est caché).
+ */
 function routineOf(token) {
   const scene = token.parent;
+  const slot = slotOf(token);
+  if ( slot ) {
+    const region = slot.region ? scene.regions.get(slot.region) : null;
+    if ( !slot.activity || !region ) return null;
+    if ( slot.activity === "patrol" ) {
+      const patrol = behaviorOf(region, PATROL_TYPE);
+      return patrol ? { kind: "route", region, behavior: patrol } : null;
+    }
+    if ( slot.activity === "post" ) {
+      const post = behaviorOf(region, POST_TYPE);
+      return post ? { kind: "post", region, behavior: post } : null;
+    }
+    if ( slot.activity === "idle" ) return { kind: "post", region, behavior: { system: { wander: true } } };
+    return { kind: slot.activity, region, behavior: { system: {} }, slot };
+  }
   const routeId = token.getFlag(MODULE_ID, "route");
   const route = routeId ? scene.regions.get(routeId) : null;
   const patrol = route ? behaviorOf(route, PATROL_TYPE) : null;
@@ -178,7 +198,7 @@ function routineOf(token) {
 function atHome(token, routine, mem) {
   if ( routine?.kind === "route" ) return true;
   const here = centreOf(token);
-  if ( routine?.kind === "post" ) return regionHas(routine.region, here, token._source.elevation ?? 0);
+  if ( ["post", "sleep", "off"].includes(routine?.kind) ) return regionHas(routine.region, here, token._source.elevation ?? 0);
   if ( !mem.home ) return true;
   return Math.hypot(here.x - mem.home.x, here.y - mem.home.y) <= token.parent.grid.size;
 }
@@ -190,6 +210,8 @@ function goHome(token, routine, mem) {
     if ( !points.length ) return;
     mem.route = { regionId: routine.region.id, points, index: nearestWaypoint(points, centreOf(token)), direction: 1 };
     walkTo(token, points[mem.route.index], "home");
+  } else if ( ["sleep", "off"].includes(routine?.kind) ) {
+    walkTo(token, placeOf(token, routine.slot) ?? mem.home, "home");
   } else if ( routine?.kind === "post" ) {
     const b = routine.region.object?.bounds;
     walkTo(token, b ? { x: b.x + (b.width / 2), y: b.y + (b.height / 2) } : mem.home, "home");
@@ -199,6 +221,9 @@ function goHome(token, routine, mem) {
 /** Un pas de routine au calme. */
 async function doRoutine(token, routine, mem, now) {
   if ( mem.walking ) return;
+  // Parti (horaire `off`) : arrivé à sa sortie, il quitte la scène (caché). Au dortoir : runtime/schedule.mjs l'endort.
+  if ( routine?.kind === "off" ) return hide(token);
+  if ( routine?.kind === "sleep" ) return;
   if ( routine?.kind === "route" ) {
     const points = routePoints(routine.region.shapes.map(s => s.toObject?.() ?? s));
     if ( !points.length ) return;
@@ -254,6 +279,8 @@ async function tickToken(token, all, now) {
   const mem = memOf(token);
   if ( !mem.home ) mem.home = centreOf(token);
   const routine = routineOf(token);
+  // Endormi (§10.6) : il ne voit rien ; un bruit, l'alarme ou un dégât le réveillent (runtime/schedule.mjs).
+  if ( await sleepStep(token, { atHome: atHome(token, routine, mem), walking: mem.walking, state: mem.state }) ) return;
   const seen = seenEnemy(token, all);
   const purposeWasSearch = mem.purpose === "search";
   // L'alarme du groupe (étape 7, runtime/flags.mjs), à son heure : chacun réagit avec un petit délai.
@@ -387,7 +414,7 @@ function onNoise(mover) {
   const at = centreOf(mover);
   const radius = NOISE_CELLS * scene.grid.size;
   for ( const npc of scene.tokens ) {
-    if ( (npc === mover) || !able(npc) || !driven(npc) || fighting(npc) || !hostile(npc, mover) ) continue;
+    if ( (npc === mover) || !able(npc) || asleep(npc) || !driven(npc) || fighting(npc) || !hostile(npc, mover) ) continue;
     const me = centreOf(npc);
     if ( Math.hypot(at.x - me.x, at.y - me.y) > radius ) continue;
     if ( engine.canSee(npc, mover) === true ) continue;   // vu : l'horloge s'en charge
@@ -427,7 +454,7 @@ export function registerClock() {
   Hooks.on("canvasReady", () => memory.clear());
   // §184 du moteur : un PJ furtif a fait douter une créature menée — elle se tourne et va voir (repéré, sa vue le voit déjà).
   engine.onStealthNoticed((observer, target, { level, point }={}) => {
-    if ( !isActiveGM() || (level !== "suspicious") || !observer || !driven(observer) || fighting(observer) ) return;
+    if ( !isActiveGM() || (level !== "suspicious") || !observer || asleep(observer) || !driven(observer) || fighting(observer) ) return;
     hear(observer, point ?? centreOf(target));
   });
   // Un token déplacé par le MJ (pas par une marche de l'IA), hors combat : sa nouvelle place devient son point de départ.

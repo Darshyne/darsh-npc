@@ -26,6 +26,8 @@ import { registerAssign, assign } from "./ui/assign.mjs";
 import { registerFlags, raiseAlarm, resetAlarms, callReserve, resetReserve, reserveState, groupOf, onArrive } from "./runtime/flags.mjs";
 import { registerReserveUI } from "./ui/reserve.mjs";
 import { RESERVE_TYPE } from "./adapter/behaviors.mjs";
+import { registerSchedules, refreshScene, scheduleInfo, setOwnSchedule, setGroupSchedule, sleepersOf, wakeUp } from "./runtime/schedule.mjs";
+import { registerScheduleUI } from "./ui/schedule.mjs";
 
 /** Le token d'une scène affichée par son id, ou l'erreur qui dit pourquoi. */
 function tokenOf(tokenId) {
@@ -65,6 +67,8 @@ Hooks.once("init", () => {
   registerFlags();
   registerAssign();
   registerReserveUI();
+  registerSchedules();
+  registerScheduleUI();
 });
 
 Hooks.once("setup", () => {
@@ -114,6 +118,13 @@ Hooks.once("ready", () => {
       group: token => groupOf(token),
       /** Affecter un token à une patrouille ou un poste (id de région), ou le retirer (null). */
       assign: (token, regionId) => assign(token, regionId),
+      /**
+       * Les horaires (§10.6). `schedule(token)` : ce que dit son horaire (sources, créneau en cours) ; `schedule(token, slots)` : poser
+       * son horaire propre (`[{ from: "22:00", to: "06:00", activity, region, wake }]`, null : le retirer).
+       */
+      schedule: (token, slots) => (slots === undefined ? scheduleInfo(token) : setOwnSchedule(token, slots)),
+      /** L'horaire d'un groupe sur une scène (null : le retirer). */
+      groupSchedule: (scene, group, slots) => setGroupSchedule(scene, group, slots),
       /** Engagement automatique (§10.3) : juger la scène affichée maintenant (mettre en combat qui voit un ennemi). */
       engage: () => checkEngagement(),
       /** Profils et haines d'un autre module, validés. */
@@ -243,6 +254,26 @@ Hooks.once("ready", () => {
       doute: ({ tokenId, x, y }={}) => { hear(tokenOf(tokenId), { x, y }); return { heard: { x, y } }; },
       /** Mettre le jeu en pause ou l'en sortir (scénarios du temps réel). */
       pause: async ({ paused=true }={}) => { game.togglePause(!!paused, { broadcast: true }); return { paused: game.paused }; },
+      /**
+       * Horaires (§10.6) : `{ tokenId }` lit ; `slots` pose l'horaire du token (null : le retire) ; `group` + `groupSlots` pose celui
+       * d'un groupe de la scène ; `refresh` relit la scène (`delta` : un saut d'horloge en secondes, pour le rattrapage ; `force` : même
+       * sans changement de créneau).
+       */
+      horaire: async ({ tokenId, slots, group, groupSlots, refresh=false, delta=null, force=false, clear=false }={}) => {
+        if ( group !== undefined ) await setGroupSchedule(canvas.scene, group, groupSlots ?? null);
+        const token = tokenId ? tokenOf(tokenId) : null;
+        // `clear` : tout ce que les horaires ont posé sur le token (créneau, sommeil, caché par l'horaire), et sa mémoire.
+        if ( token && clear ) {
+          if ( token.getFlag(MODULE_ID, "scheduleHidden") ) await token.update({ hidden: false });
+          await token.update(Object.fromEntries(["schedule", "slot", "asleep", "scheduleHidden"].map(k => [`flags.${MODULE_ID}.-=${k}`, null])));
+          await forget(token);
+        }
+        if ( token && (slots !== undefined) ) await setOwnSchedule(token, slots);
+        const changed = refresh ? await refreshScene(canvas.scene, { delta, force }) : [];
+        return { changed, info: token ? scheduleInfo(token) : null, sleepers: sleepersOf(), worldTime: game.time.worldTime };
+      },
+      /** Réveiller un dormeur tout de suite (scénarios). */
+      reveiller: async ({ tokenId }={}) => { await wakeUp(tokenOf(tokenId), { cause: "api" }); return { ok: true }; },
       /** Un pas d'horloge tout de suite (sans attendre la seconde). */
       horloge: async () => { await clockTick(); return { ticked: true }; },
       pilote: async ({ tokenId, mode }={}) => {

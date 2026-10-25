@@ -53,7 +53,8 @@ export function engagementsOn(scene) {
   // §181 (décision de l'utilisateur, 2026-10-14) : deux créatures du MJ hostiles entre elles ne s'engagent que si un PJ est sur la scène.
   const playerHere = all.some(isPlayerSide);
   for ( const observer of all ) {
-    if ( isPlayerSide(observer) ) continue;
+    // Un dormeur (§10.6) ne voit rien : il n'engage personne (attaqué, il entre quand même en combat).
+    if ( isPlayerSide(observer) || observer.getFlag(MODULE_ID, "asleep") ) continue;
     for ( const target of all ) {
       if ( (target === observer) || !hostile(observer, target) ) continue;
       if ( !playerHere && !isPlayerSide(target) ) continue;

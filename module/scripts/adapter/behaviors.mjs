@@ -34,7 +34,9 @@ function behaviorClasses() {
         label: new fields.StringField({ required: true, blank: true, initial: "" }),
         mode: new fields.StringField({ required: true, initial: "loop",
           choices: { loop: "DNPC.Patrouille.Mode.loop", pingpong: "DNPC.Patrouille.Mode.pingpong", random: "DNPC.Patrouille.Mode.random" } }),
-        pause: new fields.NumberField({ required: true, min: 0, max: 120, step: 1, initial: 3 })
+        pause: new fields.NumberField({ required: true, min: 0, max: 120, step: 1, initial: 3 }),
+        // Heures où la patrouille est tenue (§10.6, « 06:00-22:00 ») ; vide = toujours.
+        hours: new fields.StringField({ required: true, blank: true, initial: "" })
       };
     }
     static events = {};
@@ -49,7 +51,8 @@ function behaviorClasses() {
         wander: new fields.BooleanField({ initial: true }),
         scan: new fields.StringField({ required: true, blank: true, initial: "",
           choices: { "": "DNPC.Balayage.default", none: "DNPC.Balayage.none", narrow: "DNPC.Balayage.narrow", wide: "DNPC.Balayage.wide",
-            full: "DNPC.Balayage.full" } })
+            full: "DNPC.Balayage.full" } }),
+        hours: new fields.StringField({ required: true, blank: true, initial: "" })
       };
     }
     static events = {};
