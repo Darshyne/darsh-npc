@@ -142,7 +142,10 @@ async function place(token, point, extra={}) {
   const update = { _id: token.id, x: point.x - ((token.width * size) / 2), y: point.y - ((token.height * size) / 2), ...extra };
   if ( point.level && (point.level !== token._source.level) ) update.level = point.level;
   if ( Number.isFinite(point.elevation) ) update.elevation = point.elevation;
-  await token.parent.updateEmbeddedDocuments("Token", [update], { animate: false });
+  // On n'attend pas plus de trois secondes (voir `halt`).
+  halt(token);
+  const done = token.parent.updateEmbeddedDocuments("Token", [update], { animate: false });
+  await Promise.race([done, new Promise(r => setTimeout(r, 3000))]);
 }
 
 /** Le réveil d'un token (sans alerte : la fin d'un créneau de sommeil, ou un bruit après son délai). */
@@ -163,14 +166,37 @@ async function fallAsleep(token) {
   log.info(`${token.name} falls asleep`);
 }
 
+/**
+ * Arrêter le mouvement du cœur en cours d'un token. Tant qu'il n'est pas fini (animation qui ne finit pas : fenêtre du MJ en
+ * arrière-plan), le cœur met en file **toute** mise à jour du token derrière lui — un flag compris —, et la relève attendait sans fin.
+ */
+function halt(token) {
+  if ( !token.movement || ["completed", "stopped"].includes(token.movement.state) ) return;
+  try { token.stopMovement?.(); } catch(err) { log.warn(`${token.name}: movement not stopped`, err); }
+}
+
 /** Passer d'un créneau à l'autre. `jump` : rattrapage (téléporte, remet au calme). */
 async function transition(token, before, next, { jump=false }={}) {
+  const entry = { at: Date.now(), name: token.name, to: next?.key ?? "none", jump, steps: [], token };
+  trace.push(entry);
+  if ( trace.length > 30 ) trace.shift();
+  try { await transitionSteps(token, next, { jump, entry }); }
+  finally { traced(entry, "end"); delete entry.token; }
+}
+
+async function transitionSteps(token, next, { jump, entry }) {
+  // Un nouveau créneau interrompt la marche en cours (relève : il repart vers son nouveau lieu).
+  halt(token);
+  memOf(token).walking = false;
   const stored = next ? { key: next.key, activity: next.activity, region: next.region ?? null, wake: next.wake ?? WAKE_SECONDS,
     source: next.source } : { key: "none", activity: null, region: null };
+  traced(entry, "start");
   await token.setFlag(MODULE_ID, "slot", stored);
+  traced(entry, "slot");
   const wasHidden = !!token.getFlag(MODULE_ID, "scheduleHidden");
   if ( asleep(token) && (stored.activity !== "sleep") ) await wakeUp(token, { cause: "slot" });
   if ( jump ) await forget(token);
+  traced(entry, "forget");
   const mem = memOf(token);
   Object.assign(mem, { route: null, failedAt: null, arrived: false, glance: null, base: null, awakeUntil: 0 });
   // Hors de la scène.
@@ -178,14 +204,19 @@ async function transition(token, before, next, { jump=false }={}) {
     if ( jump || !stored.region ) await hide(token);
     return;
   }
-  const point = stored.activity ? placeOf(token, stored) : null;
+  // Déjà dans la région de son créneau (un rattrapage n'y touche pas) : il y reste.
+  const region = stored.region ? token.parent.regions.get(stored.region) : null;
+  const inside = !!region && (stored.activity !== "patrol") && regionHas(region, centreOf(token), token._source.elevation ?? 0);
+  const point = (stored.activity && !inside) ? placeOf(token, stored) : null;
   if ( wasHidden ) {
     // Il revient : à son nouveau lieu (ou où il était parti), révélé.
     await token.unsetFlag(MODULE_ID, "scheduleHidden");
     await place(token, point ?? centreOf(token), { hidden: false });
   } else if ( jump && point ) await place(token, point);
+  traced(entry, `placed ${point ? "yes" : "no"} inside ${inside}`);
   memOf(token).home = point ? { x: point.x, y: point.y } : centreOf(token);
   if ( jump && (stored.activity === "sleep") ) await fallAsleep(token);
+  traced(entry, "asleep");
 }
 
 /** Cacher un token « parti » (horaire `off`). */
@@ -195,30 +226,65 @@ export async function hide(token) {
   await token.update({ hidden: true });
 }
 
-let refreshing = false;
+/** Les dernières relèves (diagnostic des scénarios) : `{ at, name, to, jump, steps: [[étape, ms]] }`. */
+export const trace = [];
+const traced = (entry, step) => entry?.steps.push([step, Date.now() - entry.at, entry.token?.movement?.state ?? null]);
 
-/** Relire les horaires de la scène (MJ actif). `delta` : le saut de l'horloge du monde qui l'a demandé (secondes). */
-export async function refreshScene(scene=canvas?.scene, { delta=null, force=false }={}) {
-  if ( !scene || !isActiveGM() || refreshing ) return [];
-  refreshing = true;
+/** Les relectures passent une à la fois ; `next` : celle qui attend son tour (les demandes qui arrivent s'y fusionnent). */
+let tail = Promise.resolve();
+let next = null;
+
+/**
+ * Relire les horaires de la scène (MJ actif). `delta` : le saut de l'horloge du monde qui l'a demandé (secondes). Une demande qui arrive
+ * pendant une relecture n'est pas perdue (un saut juste après la pose d'un horaire) : elle passe ensuite, fusionnée avec les autres
+ * demandes en attente (le plus grand saut, `force`).
+ */
+export function refreshScene(scene=canvas?.scene, { delta=null, force=false }={}) {
+  if ( !scene || !isActiveGM() ) return Promise.resolve([]);
+  if ( next && (next.scene === scene) ) {
+    if ( Math.abs(Number(delta) || 0) > Math.abs(Number(next.delta) || 0) ) next.delta = delta;
+    next.force ||= force;
+    return next.promise;
+  }
+  const req = { scene, delta, force };
+  next = req;
+  req.promise = tail = tail.catch(() => null).then(() => {
+    if ( next === req ) next = null;
+    return refreshNow(req.scene, req);
+  });
+  return req.promise;
+}
+
+/** L'heure du monde vue par la dernière relecture : un saut se voit quelle que soit la demande qui le lit en premier. */
+let lastSeen = null;
+
+async function refreshNow(scene, { delta, force }) {
   const changed = [];
-  try {
-    const jump = isCatchUp(delta);
-    for ( const token of scene.tokens ) {
-      const stored = slotOf(token);
-      if ( !scheduled(token) ) {
-        if ( stored ) await token.unsetFlag(MODULE_ID, "slot");
-        continue;
-      }
-      const next = decideFor(token);
-      const key = next?.key ?? "none";
-      if ( !force && (stored?.key === key) ) continue;
-      try {
-        await transition(token, stored, next, { jump: jump || (force && !stored) });
-        changed.push({ name: token.name, from: stored?.key ?? null, to: key, jump });
-      } catch(err) { log.error(`${token.name}: schedule transition failed`, err); }
+  const now = game.time.worldTime;
+  // Une relecture sans saut demandée juste avant un saut d'horloge (un horaire qui vient d'être posé) passe parfois après lui : c'est
+  // l'écart avec la relecture précédente qui dit le rattrapage, pas seulement le `delta` de la demande.
+  const jump = isCatchUp(delta) || ((lastSeen !== null) && isCatchUp(now - lastSeen));
+  lastSeen = now;
+  // Un rattrapage pose les tokens : une marche du moteur en cours les remettrait sur leur ancien chemin. Les marches de ce client (le
+  // MJ actif : celles de l'IA) s'arrêtent d'abord — un saut d'une heure remet tout le monde au calme de toute façon.
+  if ( jump && scene.tokens.some(t => scheduled(t) && memOf(t).walking) ) {
+    engine.stopWalks();
+    await new Promise(r => setTimeout(r, 400));
+  }
+  for ( const token of scene.tokens ) {
+    const stored = slotOf(token);
+    if ( !scheduled(token) ) {
+      if ( stored ) await token.unsetFlag(MODULE_ID, "slot");
+      continue;
     }
-  } finally { refreshing = false; }
+    const next = decideFor(token);
+    const key = next?.key ?? "none";
+    if ( !force && (stored?.key === key) ) continue;
+    try {
+      await transition(token, stored, next, { jump: jump || (force && !stored) });
+      changed.push({ name: token.name, from: stored?.key ?? null, to: key, jump });
+    } catch(err) { log.error(`${token.name}: schedule transition failed`, err); }
+  }
   if ( changed.length ) log.info(`schedules: ${changed.map(c => `${c.name} → ${c.to}${c.jump ? " (jump)" : ""}`).join(", ")}`);
   return changed;
 }

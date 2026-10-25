@@ -83,6 +83,8 @@ export default {
     await put(bandit, 9, 10);
     await put(guerrier, 25, 25);
     for ( const t of [zombi, bandit] ) { await npc("horaire", { tokenId: t.id, clear: true }); await npc("alerte", { tokenId: t.id, reset: true }); }
+    // L'horaire posé à 3 h : premier créneau = le poste (le Zombi s'y met en marche) ; le saut à 12 h le pose ensuite au dortoir.
+    await goTo(3);
     await npc("groupe", { tokenId: zombi.id, group: GROUP });
     await npc("groupe", { tokenId: bandit.id, group: GROUP });
     await npc("horaire", { tokenId: zombi.id, slots: [

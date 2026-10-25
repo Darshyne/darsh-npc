@@ -26,7 +26,7 @@ import { registerAssign, assign } from "./ui/assign.mjs";
 import { registerFlags, raiseAlarm, resetAlarms, callReserve, resetReserve, reserveState, groupOf, onArrive } from "./runtime/flags.mjs";
 import { registerReserveUI } from "./ui/reserve.mjs";
 import { RESERVE_TYPE } from "./adapter/behaviors.mjs";
-import { registerSchedules, refreshScene, scheduleInfo, setOwnSchedule, setGroupSchedule, sleepersOf, wakeUp } from "./runtime/schedule.mjs";
+import { registerSchedules, refreshScene, scheduleInfo, setOwnSchedule, setGroupSchedule, sleepersOf, wakeUp, trace as scheduleTrace } from "./runtime/schedule.mjs";
 import { registerScheduleUI } from "./ui/schedule.mjs";
 
 /** Le token d'une scène affichée par son id, ou l'erreur qui dit pourquoi. */
@@ -270,7 +270,8 @@ Hooks.once("ready", () => {
         }
         if ( token && (slots !== undefined) ) await setOwnSchedule(token, slots);
         const changed = refresh ? await refreshScene(canvas.scene, { delta, force }) : [];
-        return { changed, info: token ? scheduleInfo(token) : null, sleepers: sleepersOf(), worldTime: game.time.worldTime };
+        return { changed, info: token ? scheduleInfo(token) : null, sleepers: sleepersOf(), worldTime: game.time.worldTime,
+          trace: scheduleTrace.slice(-12) };
       },
       /** Réveiller un dormeur tout de suite (scénarios). */
       reveiller: async ({ tokenId }={}) => { await wakeUp(tokenOf(tokenId), { cause: "api" }); return { ok: true }; },
