@@ -1,0 +1,19 @@
+{
+  "i18n": {
+    "namespaces": ["DNPC"],
+    "calls": [{ "fn": "loc", "prefix": "DNPC." }],
+    "lists": [{ "prefix": "DNPC.Niveau", "values": ["off", "patrols", "engage", "combat", "full"] }],
+    "minKeys": 135
+  },
+  "layers": {
+    "imports": {
+      "core": [".", "content", "adapter", "runtime", "ui"],
+      "content": [".", "adapter", "runtime", "ui"],
+      "adapter": ["runtime", "ui"],
+      "runtime": ["ui"]
+    },
+    "pure": { "folders": ["core", "content"] },
+    "names": [{ "name": "dnd5e-combat", "only": ["adapter/engine.mjs", "darsh-npc.mjs"], "why": "le moteur n'est nommé que dans son adaptateur, et dans le point d'entrée pour sa version (SPEC §2-2)" }],
+    "forbid": [{ "name": "ecritures", "pattern": "\\b(?:actor|item)\\.(?:update|setFlag|unsetFlag|createEmbeddedDocuments|deleteEmbeddedDocuments|toggleStatusEffect)\\(", "why": "rien n'écrit sur un acteur ou un item : c'est le moteur qui exécute (SPEC §2-1, §13)" }]
+  }
+}
