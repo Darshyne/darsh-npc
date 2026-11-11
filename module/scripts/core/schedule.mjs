@@ -109,10 +109,11 @@ const pick = s => ({ activity: s.activity, region: s.region, wake: s.wake });
 
 /**
  * Le passage d'un créneau à l'autre : marcher (relève visible), ou téléporter (rattrapage d'un saut d'horloge, §10.6).
- * @param {number|null} delta  le saut de l'horloge du monde qui a fait changer le créneau (secondes), null si inconnu
+ * @param {number|null} delta  le saut de l'horloge du monde qui a fait changer le créneau (secondes), null si inconnu ;
+ *   `Infinity` : un temps inconnu mais à tenir pour long (une scène qui s'affiche : on pose, on ne fait pas marcher)
  */
 export function isCatchUp(delta) {
-  return Number.isFinite(delta) && (Math.abs(delta) >= CATCH_UP_SECONDS);
+  return (typeof delta === "number") && !Number.isNaN(delta) && (Math.abs(delta) >= CATCH_UP_SECONDS);
 }
 
 /** Un réveil : dans combien de rounds de combat, pour un délai en secondes (au moins un si le délai n'est pas nul). */

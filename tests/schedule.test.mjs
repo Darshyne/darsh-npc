@@ -91,6 +91,12 @@ describe("horaires : qui décide", () => {
     expect(isCatchUp(3600)).toBe(true);
     expect(isCatchUp(-8 * 3600)).toBe(true);
     expect(isCatchUp(null)).toBe(false);
+    // Une scène qui s'affiche demande un rattrapage sans connaître le temps passé (`delta: Infinity`, runtime/schedule.mjs).
+    expect(isCatchUp(Infinity)).toBe(true);
+    expect(isCatchUp(-Infinity)).toBe(true);
+    expect(isCatchUp(NaN)).toBe(false);
+    expect(isCatchUp(undefined)).toBe(false);
+    expect(isCatchUp("7200")).toBe(false);
     expect(wakeRounds(12)).toBe(2);
     expect(wakeRounds(1)).toBe(1);
     expect(wakeRounds(0)).toBe(0);
