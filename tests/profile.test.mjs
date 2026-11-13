@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  bandOf, atLeast, wisdomOf, courageOf, rangeOf, roleOf, traitFlags, profileOf, validateOverride, validateProfiles, matchFacts, layersFrom
+  bandOf, atLeast, wisdomOf, courageOf, rangeOf, roleOf, traitFlags, profileOf, validateOverride, validateProfiles, matchFacts, layersFrom, speciesOf
 } from "../module/scripts/core/profile.mjs";
 
 /** Des faits synthétiques (aucune fiche réelle) : un humanoïde moyen. */
@@ -177,5 +177,21 @@ describe("rôle et portée lus sur la fiche (contrôle en jeu du 2026-10-12)", (
   it("les mains nues ne comptent pas, sauf si c'est tout ce qu'il y a", () => {
     expect(rangeOf([rayOfFrost, unarmed])).toBe("ranged");
     expect(rangeOf([unarmed])).toBe("melee");
+  });
+});
+
+describe("espèce d'un PJ (Manuel des joueurs 2.2.0 → 3.0.0)", () => {
+  it("une ancienne lignée revient à son espèce ; la nouvelle forme et les autres restent telles quelles", () => {
+    expect(speciesOf("elf-high")).toBe("elf");
+    expect(speciesOf("elf-drow")).toBe("elf");
+    expect(speciesOf("gnome-rock")).toBe("gnome");
+    expect(speciesOf("Tiefling-Infernal")).toBe("tiefling");
+    expect(speciesOf("elf")).toBe("elf");
+    expect(speciesOf("dwarf")).toBe("dwarf");
+    expect(speciesOf("half-elf")).toBe("half-elf");
+    expect(speciesOf(null)).toBeNull();
+  });
+  it("une haine contre les elfes vise aussi un Haut-elfe d'une fiche 2.2.0", () => {
+    expect(matchFacts({ species: "elf" }, facts({ species: speciesOf("elf-wood") }))).toBe(true);
   });
 });

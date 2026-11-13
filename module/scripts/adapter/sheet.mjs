@@ -11,7 +11,7 @@
  *  - concentration : effet actif portant le statut `CONFIG.specialStatusEffects.CONCENTRATING` (documents/actor/actor.mjs:247).
  */
 import { averageOf } from "../core/dice.mjs";
-import { roleOf } from "../core/profile.mjs";
+import { roleOf, speciesOf } from "../core/profile.mjs";
 
 export { roleOf };
 import { identifierOf } from "./engine.mjs";
@@ -85,7 +85,7 @@ export function factsOf(actor) {
     concentrating: !!actor?.concentration?.effects?.size,
     traits,
     attacks,
-    species: actor?.type === "character" ? (details.race?.system?.identifier ?? details.race?.identifier ?? null) : null
+    species: actor?.type === "character" ? speciesOf(details.race?.system?.identifier ?? details.race?.identifier ?? null) : null
   };
 }
 

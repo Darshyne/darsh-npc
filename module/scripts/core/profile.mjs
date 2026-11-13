@@ -196,6 +196,23 @@ export function validateOverride(set) {
   return errors;
 }
 
+/**
+ * Les espèces que le Manuel des joueurs 2.2.0 découpait en une espèce par lignée (`elf-high`…) ; la 3.0.0 et le SRD de dnd5e 6.1 n'ont
+ * plus qu'une espèce (`elf`), la lignée devient une aptitude. Les fiches remplies avant gardent l'ancien item d'espèce.
+ */
+const LEGACY_SPECIES = Object.freeze({
+  "elf-drow": "elf", "elf-high": "elf", "elf-wood": "elf",
+  "gnome-forest": "gnome", "gnome-rock": "gnome",
+  "tiefling-abyssal": "tiefling", "tiefling-chthonic": "tiefling", "tiefling-infernal": "tiefling"
+});
+
+/** L'espèce d'un PJ telle que les tables la nomment : l'identifiant de son item d'espèce, une ancienne lignée ramenée à son espèce. */
+export function speciesOf(identifier) {
+  if ( !identifier ) return null;
+  const id = String(identifier).toLowerCase();
+  return LEGACY_SPECIES[id] ?? id;
+}
+
 /** Les clés sur lesquelles une entrée de table (`match`) peut sélectionner une créature. */
 export const MATCH_KEYS = Object.freeze(["type", "subtype", "identifier", "species"]);
 
